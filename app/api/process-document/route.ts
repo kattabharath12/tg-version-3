@@ -1,10 +1,9 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
-import { downloadFile } from "@/lib/s3";
-import { getAzureClient } from "@/lib/azure-client";
+import { getFile } from "@/lib/file-storage";
+import { azureClient } from "@/lib/azure-client";
 
 export const dynamic = "force-dynamic";
 
@@ -47,21 +46,14 @@ export async function POST(request: NextRequest) {
     });
 
     try {
-      // Download file from S3
-      const signedUrl = await downloadFile(document.cloudStoragePath);
-      
-      // Fetch the file content
-      const response = await fetch(signedUrl);
-      const fileBuffer = await response.arrayBuffer();
-
-      // Get Azure client instance (lazy initialization - only created at runtime)
-      const azureClient = getAzureClient();
+      // Read file from local storage
+      const fileBuffer = await getFile(document.cloudStoragePath);
 
       // Process with Azure Document Intelligence using filename for better model selection
       const result = await azureClient.analyzeDocument(
         fileBuffer, 
         document.documentType, 
-        document.fileName || 'document.pdf'  // Pass filename for better model selection
+        document.fileName || 'document.pdf'
       );
       const extractedFields = azureClient.extractFieldsFromResult(result);
       
@@ -84,7 +76,7 @@ export async function POST(request: NextRequest) {
 
       await Promise.all(extractedDataPromises);
 
-      // Calculate overall confidence from documents (like the Python code)
+      // Calculate overall confidence from documents
       const overallConfidence = result.documents.length > 0 
         ? result.documents.reduce((sum, doc) => sum + doc.confidence, 0) / result.documents.length 
         : 0;
