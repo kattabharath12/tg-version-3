@@ -1,4 +1,3 @@
-
 import DocumentIntelligence from '@azure-rest/ai-document-intelligence';
 import { AzureKeyCredential } from '@azure/core-auth';
 
@@ -23,11 +22,22 @@ export interface AzureDocumentAnalysisResult {
 }
 
 export class AzureDocumentClient {
-  private client: ReturnType<typeof DocumentIntelligence>;
-  private endpoint: string;
-  private apiKey: string;
+  private client: ReturnType<typeof DocumentIntelligence> | null = null;
+  private endpoint: string = "";
+  private apiKey: string = "";
+  private initialized: boolean = false;
 
   constructor() {
+    // Don't initialize during construction - wait until runtime when actually needed
+    // This prevents build-time errors when environment variables aren't available
+  }
+
+  private ensureInitialized(): void {
+    // Lazy initialization - only create client when first method is called at runtime
+    if (this.initialized) {
+      return;
+    }
+
     this.endpoint = process.env.AZURE_DOC_INTELLIGENCE_ENDPOINT || "";
     this.apiKey = process.env.AZURE_DOC_INTELLIGENCE_API_KEY || "";
     
@@ -41,6 +51,8 @@ export class AzureDocumentClient {
     console.log('Azure Document Intelligence Client initialized with:');
     console.log(`Endpoint: ${this.endpoint}`);
     console.log(`API Key (first 10 chars): ${this.apiKey.substring(0, 10)}...`);
+    
+    this.initialized = true;
   }
 
   private getModelFromFilename(filename: string): string {
@@ -243,6 +255,9 @@ export class AzureDocumentClient {
   }
 
   async analyzeDocument(fileBuffer: ArrayBuffer, documentType: string, filename?: string): Promise<AzureDocumentAnalysisResult> {
+    // Ensure the Azure client is initialized at runtime (not build time)
+    this.ensureInitialized();
+
     if (!filename) {
       throw new Error("Filename is required for proper model selection");
     }
@@ -268,7 +283,7 @@ export class AzureDocumentClient {
       
       try {
         // Try new SDK signature - EXACTLY like Python code
-        const response = await this.client.path("/documentModels/{modelId}:analyze", modelId).post({
+        const response = await this.client!.path("/documentModels/{modelId}:analyze", modelId).post({
           contentType: "application/pdf",
           body: uint8Array,
         });
@@ -303,7 +318,7 @@ export class AzureDocumentClient {
           await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
           attempts++;
 
-          const pollResponse = await this.client.path("/documentModels/{modelId}/analyzeResults/{resultId}", modelId, operationId).get();
+          const pollResponse = await this.client!.path("/documentModels/{modelId}/analyzeResults/{resultId}", modelId, operationId).get();
 
           if (pollResponse.status === "200") {
             pollResult = pollResponse.body;
