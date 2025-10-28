@@ -5,10 +5,14 @@ nixPkgs = ["nodejs-18_x", "openssl"]
 cmds = ["npm install"]
 
 [phases.build]
-cmds = ["npm run build"]
-
-[phases.release]
-cmds = []
+cmds = [
+  "npx prisma generate",
+  "npm run build",
+  "mkdir -p /app/uploads"
+]
 
 [start]
 cmd = "npm start"
+
+[env]
+UPLOAD_DIR = "/app/uploads"
