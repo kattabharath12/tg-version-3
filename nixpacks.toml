@@ -1,11 +1,15 @@
 [phases.setup]
-nixPkgs = ["nodejs-18_x", "openssl"]
+nixPkgs = ["nodejs-20_x", "openssl"]
 
 [phases.install]
 cmds = ["npm install"]
 
 [phases.build]
-cmds = ["npx prisma generate", "npm run build", "mkdir -p /app/uploads"]
+cmds = [
+  "npx prisma generate",
+  "npm run build",
+  "mkdir -p /app/uploads"
+]
 
 [start]
 cmd = "npm start"
