@@ -1,9 +1,8 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
-import { uploadFile } from "@/lib/s3";
+import { uploadFile } from "@/lib/file-storage";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +42,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Upload to S3
+    // Upload to local storage
     const buffer = Buffer.from(await file.arrayBuffer());
     const cloudStoragePath = await uploadFile(buffer, file.name);
 
