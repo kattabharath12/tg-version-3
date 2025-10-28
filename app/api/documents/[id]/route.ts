@@ -1,10 +1,8 @@
-
-
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
-import { deleteFile } from "@/lib/s3";
+import { deleteFile } from "@/lib/file-storage";
 
 export const dynamic = "force-dynamic";
 
@@ -35,12 +33,12 @@ export async function DELETE(
       );
     }
 
-    // Delete the file from S3
+    // Delete the file from local storage
     try {
       await deleteFile(document.cloudStoragePath);
     } catch (error) {
-      console.error("Error deleting file from S3:", error);
-      // Continue with database deletion even if S3 deletion fails
+      console.error("Error deleting file from storage:", error);
+      // Continue with database deletion even if file deletion fails
     }
 
     // Delete the document from the database (this will cascade delete extractedData)
