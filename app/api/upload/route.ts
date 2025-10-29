@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { uploadFile } from '@/lib/file-storage';
+import { DocumentType } from '@prisma/client';
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
     fileType: file.type,
     fileSize: file.size,               // ✅ Added required field
     cloudStoragePath: fileName,        // ✅ Fixed: was fileUrl
-    documentType: type || 'OTHER',     // ✅ Fixed: was type
+    documentType: (type as DocumentType) || DocumentType.OTHER,    // ✅ Fixed: was type
     userId: user!.id,
   },
 });
