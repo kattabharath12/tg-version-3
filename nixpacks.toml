@@ -8,4 +8,4 @@ cmds = ["npm install"]
 cmds = ["npm install", "npm run build"]
 
 [start]
-cmd = "bash railway-migrate.sh && npm start"
+cmd = "bash start-with-migrate.sh && npm start"
