@@ -37,16 +37,17 @@ export async function POST(request: NextRequest) {
       where: { email: session.user.email },
     });
 
-    const document = await prisma.document.create({
-      data: {
-        fileName,
-        fileUrl: fileName,
-        fileType: file.type,
-        type: type || 'OTHER',
-        userId: user!.id,
-      },
-    });
-
+   const document = await prisma.document.create({
+  data: {
+    fileName,
+    originalFileName: file.name,      // ✅ Added required field
+    fileType: file.type,
+    fileSize: file.size,               // ✅ Added required field
+    cloudStoragePath: fileName,        // ✅ Fixed: was fileUrl
+    documentType: type || 'OTHER',     // ✅ Fixed: was type
+    userId: user!.id,
+  },
+});
     return NextResponse.json(document);
   } catch (error) {
     console.error('Upload error:', error);
