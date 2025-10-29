@@ -1,7 +1,6 @@
-
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { prisma } from "./db";
+import { prisma } from "./prisma";  // ⚠️ CHANGE THIS: was "./db"
 import bcrypt from "bcryptjs";
 
 declare module "next-auth" {
@@ -65,10 +64,13 @@ export const authOptions: NextAuthOptions = {
     })
   ],
   session: {
-    strategy: "jwt"
+    strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   pages: {
-    signIn: "/auth/login"
+    signIn: "/auth/login",
+    signOut: "/auth/login",
+    error: "/auth/error",
   },
   callbacks: {
     async jwt({ token, user }) {
@@ -86,5 +88,6 @@ export const authOptions: NextAuthOptions = {
       }
       return session;
     }
-  }
+  },
+  debug: process.env.NODE_ENV === "development",
 };
