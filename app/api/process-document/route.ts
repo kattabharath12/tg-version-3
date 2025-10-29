@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
 
       // Process with Azure Document Intelligence using filename for better model selection
       const azureClient = getAzureClient();
-const result = await azureClient.analyzeDocument(/* ... */);
+const result = await azureClient.analyzeDocument(
         fileBuffer, 
         document.documentType, 
         document.fileName || 'document.pdf'
