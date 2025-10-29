@@ -3,8 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/db";
 import { getFile } from "@/lib/file-storage";
-import { azureClient } from "@/lib/azure-client";
-
+import { getAzureClient } from "@/lib/azure-client";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
@@ -50,7 +49,8 @@ export async function POST(request: NextRequest) {
       const fileBuffer = await getFile(document.cloudStoragePath);
 
       // Process with Azure Document Intelligence using filename for better model selection
-      const result = await azureClient.analyzeDocument(
+      const azureClient = getAzureClient();
+const result = await azureClient.analyzeDocument(/* ... */);
         fileBuffer, 
         document.documentType, 
         document.fileName || 'document.pdf'
