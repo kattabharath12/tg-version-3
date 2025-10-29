@@ -5,7 +5,6 @@
     "buildCommand": "npm install && npm run build"
   },
   "deploy": {
-    "releaseCommand": "",
     "startCommand": "bash start-with-migrate.sh && npm start",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
