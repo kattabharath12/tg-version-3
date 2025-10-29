@@ -52,8 +52,7 @@ export async function POST(request: NextRequest) {
       const azureClient = getAzureClient();
 const result = await azureClient.analyzeDocument(
         fileBuffer, 
-        document.documentType, 
-        document.fileName || 'document.pdf'
+        document.documentType
       );
       const extractedFields = azureClient.extractFieldsFromResult(result);
       
