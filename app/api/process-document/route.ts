@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth-options";
-import { prisma } from "@/lib/db";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { getFile } from "@/lib/file-storage";
 import { getAzureClient } from "@/lib/azure-client";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('🔄 Process document request received');
+    
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -22,6 +24,8 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    console.log(`📋 Processing document: ${documentId}`);
 
     // Get document from database
     const document = await prisma.document.findFirst({
@@ -43,14 +47,17 @@ export async function POST(request: NextRequest) {
       where: { id: documentId },
       data: { processingStatus: "PROCESSING" }
     });
+    
+    console.log(`⏳ Status updated to PROCESSING`);
 
     try {
       // Read file from local storage
       const fileBuffer = await getFile(document.cloudStoragePath);
+      console.log(`📄 File loaded from storage: ${document.cloudStoragePath}`);
 
-      // Process with Azure Document Intelligence using filename for better model selection
+      // Process with Azure Document Intelligence
       const azureClient = getAzureClient();
-const result = await azureClient.analyzeDocument(
+      const result = await azureClient.analyzeDocument(
         fileBuffer, 
         document.documentType
       );
@@ -91,6 +98,8 @@ const result = await azureClient.analyzeDocument(
           confidence: overallConfidence
         }
       });
+      
+      console.log(`✅ Document processing completed successfully`);
 
       return NextResponse.json({
         message: "Document processed successfully",
@@ -98,7 +107,7 @@ const result = await azureClient.analyzeDocument(
       });
 
     } catch (processingError) {
-      console.error("Processing error:", processingError);
+      console.error("❌ Processing error:", processingError);
       
       // Update document status to failed
       await prisma.document.update({
@@ -115,7 +124,7 @@ const result = await azureClient.analyzeDocument(
       );
     }
   } catch (error) {
-    console.error("Process document error:", error);
+    console.error("❌ Process document error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
