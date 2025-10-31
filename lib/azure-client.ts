@@ -1,6 +1,23 @@
 import DocumentIntelligence from '@azure-rest/ai-document-intelligence';
 import { AzureKeyCredential } from '@azure/core-auth';
 
+// Map DocumentType enum to Azure model IDs
+function getAzureModelId(documentType: string): string {
+  const modelMap: Record<string, string> = {
+    'W2': 'prebuilt-tax.us.w2',
+    'FORM_1040': 'prebuilt-tax.us.1040',
+    'FORM_1099': 'prebuilt-tax.us.1099nec',
+    'INVOICE': 'prebuilt-invoice',
+    'RECEIPT': 'prebuilt-receipt',
+    'OTHER': 'prebuilt-document',  // Generic fallback
+  };
+
+  return modelMap[documentType] || 'prebuilt-document';
+}
+
+// Export the mapping function
+export { getAzureModelId };
+
 // Define types based on Azure SDK
 export interface ExtractedField {
   fieldName: string;
