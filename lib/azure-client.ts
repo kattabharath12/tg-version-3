@@ -134,7 +134,10 @@ export class AzureDocumentClient {
       // Process the result
       const processedDocuments: ProcessedDocument[] = [];
       
-      if (result.analyzeResult?.documents) {
+      // Handle structured document models (W-2, 1040, etc.)
+      if (result.analyzeResult?.documents && result.analyzeResult.documents.length > 0) {
+        console.log(`📋 Processing structured documents (${result.analyzeResult.documents.length} found)`);
+        
         for (const doc of result.analyzeResult.documents) {
           const fields: ExtractedField[] = [];
           
@@ -156,7 +159,64 @@ export class AzureDocumentClient {
             fields
           });
         }
+      } 
+      // Handle layout/generic models (prebuilt-layout, prebuilt-read)
+      else if (result.analyzeResult?.keyValuePairs || result.analyzeResult?.paragraphs) {
+        console.log(`📋 Processing layout/generic document`);
+        
+        const fields: ExtractedField[] = [];
+        
+        // Extract key-value pairs if available
+        if (result.analyzeResult.keyValuePairs) {
+          console.log(`🔑 Found ${result.analyzeResult.keyValuePairs.length} key-value pairs`);
+          
+          for (const kvp of result.analyzeResult.keyValuePairs) {
+            if (kvp.key && kvp.value) {
+              const keyText = kvp.key.content || '';
+              const valueText = kvp.value.content || '';
+              const confidence = kvp.confidence || 0;
+              
+              fields.push({
+                fieldName: keyText,
+                fieldValue: {
+                  value: valueText,
+                  confidence: confidence,
+                  type: 'keyValue'
+                },
+                confidence: confidence,
+                type: 'keyValue'
+              });
+            }
+          }
+        }
+        
+        // If no key-value pairs, extract from paragraphs
+        if (fields.length === 0 && result.analyzeResult.paragraphs) {
+          console.log(`📝 Found ${result.analyzeResult.paragraphs.length} paragraphs`);
+          
+          for (let i = 0; i < result.analyzeResult.paragraphs.length; i++) {
+            const para = result.analyzeResult.paragraphs[i];
+            fields.push({
+              fieldName: `paragraph_${i + 1}`,
+              fieldValue: {
+                value: para.content || '',
+                confidence: 1.0,
+                type: 'text'
+              },
+              confidence: 1.0,
+              type: 'text'
+            });
+          }
+        }
+        
+        processedDocuments.push({
+          docType: 'generic',
+          confidence: 0.8,
+          fields
+        });
       }
+
+      console.log(`✅ Processed ${processedDocuments.length} documents with ${processedDocuments.reduce((sum, doc) => sum + doc.fields.length, 0)} total fields`);
 
       return {
         status: "success",
