@@ -9,10 +9,10 @@ function getAzureModelId(documentType: string): string {
     'FORM_1099': 'prebuilt-tax.us.1099nec',
     'INVOICE': 'prebuilt-invoice',
     'RECEIPT': 'prebuilt-receipt',
-    'OTHER': 'prebuilt-document',
+    'OTHER': 'prebuilt-layout',
   };
 
-  return modelMap[documentType] || 'prebuilt-document';
+  return modelMap[documentType] || 'prebuilt-layout';
 }
 
 export { getAzureModelId };
