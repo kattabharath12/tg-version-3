@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getFile } from "@/lib/file-storage";
-import { getAzureClient } from "@/lib/azure-client";
+import { getAzureClient, getAzureModelId } from "@/lib/azure-client";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`📋 Processing document: ${documentId}`);
 
-    // Get document from database (no user check needed for internal call)
+    // Get document from database
     const document = await prisma.document.findUnique({
       where: { id: documentId }
     });
@@ -54,10 +54,13 @@ export async function POST(request: NextRequest) {
       console.log(`🔵 Initializing Azure client...`);
       const azureClient = getAzureClient();
       
-      console.log(`📄 Starting Azure analysis for document type: ${document.documentType}`);
+      // Map document type to Azure model ID
+      const azureModelId = getAzureModelId(document.documentType);
+      console.log(`📄 Document type: ${document.documentType} → Azure model: ${azureModelId}`);
+      
       const result = await azureClient.analyzeDocument(
         fileBuffer, 
-        document.documentType
+        azureModelId
       );
       
       console.log(`✅ Azure analysis completed`);
