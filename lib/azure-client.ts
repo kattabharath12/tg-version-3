@@ -9,16 +9,14 @@ function getAzureModelId(documentType: string): string {
     'FORM_1099': 'prebuilt-tax.us.1099nec',
     'INVOICE': 'prebuilt-invoice',
     'RECEIPT': 'prebuilt-receipt',
-    'OTHER': 'prebuilt-document',  // Generic fallback
+    'OTHER': 'prebuilt-document',
   };
 
   return modelMap[documentType] || 'prebuilt-document';
 }
 
-// Export the mapping function
 export { getAzureModelId };
 
-// Define types based on Azure SDK
 export interface ExtractedField {
   fieldName: string;
   fieldValue: any;
@@ -46,11 +44,9 @@ export class AzureDocumentClient {
 
   constructor() {
     // Don't initialize during construction - wait until runtime
-    // This prevents build-time errors when environment variables aren't available
   }
 
   private ensureInitialized(): void {
-    // Lazy initialization - only create client when first method is called at runtime
     if (this.initialized) {
       return;
     }
@@ -62,7 +58,6 @@ export class AzureDocumentClient {
       throw new Error("Azure Document Intelligence API key and endpoint must be configured");
     }
 
-    // Create the Azure Document Intelligence REST client
     this.client = DocumentIntelligence(this.endpoint, new AzureKeyCredential(this.apiKey));
     
     this.initialized = true;
@@ -84,13 +79,12 @@ export class AzureDocumentClient {
         contentType: "application/json",
         body: {
           base64Source: fileBuffer.toString('base64')
-        },
-        queryParameters: {
-          features: ["keyValuePairs"]
         }
       });
 
       if (initialResponse.status !== "202") {
+        console.error(`❌ Azure response status: ${initialResponse.status}`);
+        console.error(`❌ Azure response body:`, initialResponse.body);
         throw new Error(`Failed to start analysis: ${initialResponse.status}`);
       }
 
@@ -111,10 +105,10 @@ export class AzureDocumentClient {
       // Poll for results
       let result;
       let attempts = 0;
-      const maxAttempts = 60; // 5 minutes max
+      const maxAttempts = 60;
       
       while (attempts < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+        await new Promise(resolve => setTimeout(resolve, 2000));
         
         const pollingResponse = await this.client.path("/documentModels/{modelId}/analyzeResults/{resultId}", modelId, resultId).get();
         
@@ -128,7 +122,6 @@ export class AzureDocumentClient {
           } else if (body.status === "failed") {
             throw new Error(`Analysis failed: ${body.error?.message || 'Unknown error'}`);
           }
-          // If still running, continue polling
         }
         
         attempts++;
@@ -204,7 +197,6 @@ export class AzureDocumentClient {
   }
 }
 
-// Lazy initialization pattern - client is only created when first accessed
 let azureClientInstance: AzureDocumentClient | null = null;
 
 export function getAzureClient(): AzureDocumentClient {
