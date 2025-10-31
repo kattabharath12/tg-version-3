@@ -4,15 +4,28 @@ import { AzureKeyCredential } from '@azure/core-auth';
 // Map DocumentType enum to Azure model IDs
 function getAzureModelId(documentType: string): string {
   const modelMap: Record<string, string> = {
+    // W-2 Forms
     'W2': 'prebuilt-tax.us.w2',
+    
+    // 1040 Forms
     'FORM_1040': 'prebuilt-tax.us.1040',
+    
+    // 1099 Forms - All variants
     'FORM_1099': 'prebuilt-tax.us.1099nec',
+    'FORM_1099_NEC': 'prebuilt-tax.us.1099nec',
+    'FORM_1099_MISC': 'prebuilt-tax.us.1099misc',
+    'FORM_1099_INT': 'prebuilt-tax.us.1099int',
+    'FORM_1099_DIV': 'prebuilt-tax.us.1099div',
+    
+    // Other document types
     'INVOICE': 'prebuilt-invoice',
     'RECEIPT': 'prebuilt-receipt',
     'OTHER': 'prebuilt-layout',
   };
 
-  return modelMap[documentType] || 'prebuilt-layout';
+  const modelId = modelMap[documentType] || 'prebuilt-layout';
+  console.log(`📄 Document type: ${documentType} → Azure model: ${modelId}`);
+  return modelId;
 }
 
 export { getAzureModelId };
@@ -134,7 +147,7 @@ export class AzureDocumentClient {
       // Process the result
       const processedDocuments: ProcessedDocument[] = [];
       
-      // Handle structured document models (W-2, 1040, etc.)
+      // Handle structured document models (W-2, 1040, 1099, etc.)
       if (result.analyzeResult?.documents && result.analyzeResult.documents.length > 0) {
         console.log(`📋 Processing structured documents (${result.analyzeResult.documents.length} found)`);
         
