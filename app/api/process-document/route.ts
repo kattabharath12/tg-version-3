@@ -66,34 +66,19 @@ export async function POST(request: NextRequest) {
       console.log(`- Documents found: ${result.documents?.length || 0}`);
       console.log(`- Total fields extracted: ${extractedFields.length}`);
 
-      // Validate that we have extracted data
-      if (extractedFields.length === 0) {
-        console.warn(`⚠️ Warning: No fields extracted from ${document.fileName}`);
-        console.warn(`- Document type: ${document.documentType}`);
-        console.warn(`- Model used: ${result.modelUsed}`);
-        console.warn(`- This may indicate an issue with the document or model selection`);
-      } else {
-        console.log(`✅ Successfully extracted ${extractedFields.length} fields`);
-        console.log(`📋 Field names: ${extractedFields.map(f => f.fieldName).join(', ')}`);
-      }
-
       // Save extracted data to database
-      const extractedDataPromises = extractedFields.map((field, index) => {
-        console.log(`  💾 Saving field ${index + 1}/${extractedFields.length}: ${field.fieldName} = ${field.fieldValue?.substring(0, 50)}${field.fieldValue && field.fieldValue.length > 50 ? '...' : ''}`);
-        
-        return prisma.extractedData.create({
+      const extractedDataPromises = extractedFields.map(field =>
+        prisma.extractedData.create({
           data: {
             documentId: document.id,
             fieldName: field.fieldName,
             fieldValue: field.fieldValue,
             confidence: field.confidence,
           }
-        });
-      });
+        })
+      );
 
       await Promise.all(extractedDataPromises);
-      
-      console.log(`✅ Successfully saved ${extractedFields.length} extracted fields to database`);
 
       // Calculate overall confidence from documents
       const overallConfidence = result.documents.length > 0 
@@ -102,13 +87,39 @@ export async function POST(request: NextRequest) {
       
       console.log(`📊 Overall document confidence: ${Math.round(overallConfidence * 100)}%`);
 
-      // Update document status to completed
+      // Determine the correct document type from Azure's analysis
+      // Azure returns document types like "tax.us.w2", "tax.us.1099INT", etc.
+      let detectedDocumentType = document.documentType; // Default to existing type
+      
+      if (result.documents.length > 0) {
+        const azureDocType = result.documents[0].docType; // e.g., "tax.us.w2"
+        
+        // Map Azure document types to our application's document types
+        if (azureDocType.includes('w2') || azureDocType.includes('W2')) {
+          detectedDocumentType = 'W2';
+        } else if (azureDocType.includes('1099INT') || azureDocType.includes('1099-INT')) {
+          detectedDocumentType = 'FORM_1099_INT';
+        } else if (azureDocType.includes('1099DIV') || azureDocType.includes('1099-DIV')) {
+          detectedDocumentType = 'FORM_1099_DIV';
+        } else if (azureDocType.includes('1099NEC') || azureDocType.includes('1099-NEC')) {
+          detectedDocumentType = 'FORM_1099_NEC';
+        } else if (azureDocType.includes('1099MISC') || azureDocType.includes('1099-MISC')) {
+          detectedDocumentType = 'FORM_1099_MISC';
+        } else if (azureDocType.includes('1040')) {
+          detectedDocumentType = 'FORM_1040';
+        }
+        
+        console.log(`🎯 Azure detected document type: ${azureDocType} → Mapped to: ${detectedDocumentType}`);
+      }
+
+      // Update document status to completed with corrected document type
       await prisma.document.update({
         where: { id: documentId },
         data: {
           processingStatus: "COMPLETED",
           processedAt: new Date(),
-          confidence: overallConfidence
+          confidence: overallConfidence,
+          documentType: detectedDocumentType as any
         }
       });
 
