@@ -211,13 +211,21 @@ export default function DocumentList({ documents, onRefresh }: DocumentListProps
                           </div>
                         </Badge>
 
+                        {/* Warning badge for completed documents with no data */}
+                        {document.processingStatus === 'COMPLETED' && (!document.extractedData || document.extractedData.length === 0) && (
+                          <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700 border-yellow-200">
+                            <AlertCircle className="h-3 w-3 mr-1" />
+                            No Data
+                          </Badge>
+                        )}
+
                         <div className="flex items-center space-x-1">
-                          {document.processingStatus === 'COMPLETED' && document.extractedData?.length > 0 && (
+                          {document.processingStatus === 'COMPLETED' && (
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => setSelectedDocument(document)}
-                              title="View extracted data"
+                              title={document.extractedData?.length > 0 ? "View extracted data" : "View document details (no data extracted)"}
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
@@ -282,22 +290,61 @@ export default function DocumentList({ documents, onRefresh }: DocumentListProps
                 <div className="p-6 overflow-y-auto max-h-[60vh]">
                   {selectedDocument.extractedData?.length > 0 ? (
                     <div className="space-y-3">
-                      {selectedDocument.extractedData.map((field, index) => (
-                        <div key={index} className="flex justify-between items-center py-2 border-b border-gray-100">
-                          <span className="font-medium text-sm">{field.fieldName}:</span>
-                          <div className="text-right">
-                            <span className="text-sm">{field.fieldValue || 'No value'}</span>
-                            <div className={`text-xs ${getConfidenceColor(field.confidence)}`}>
-                              {Math.round(field.confidence * 100)}% confidence
+                      {selectedDocument.extractedData.map((field, index) => {
+                        // Parse field value if it's a JSON string
+                        let displayValue = field.fieldValue || 'No value';
+                        
+                        // Try to make the display value more readable
+                        if (displayValue.startsWith('{') || displayValue.startsWith('[')) {
+                          try {
+                            // It might be a JSON string - try to extract meaningful data
+                            const parsed = JSON.parse(displayValue);
+                            
+                            // For objects with value property
+                            if (parsed.value !== undefined) {
+                              if (typeof parsed.value === 'object' && parsed.value.valueNumber !== undefined) {
+                                displayValue = String(parsed.value.valueNumber);
+                              } else if (typeof parsed.value === 'object' && parsed.value.valueString !== undefined) {
+                                displayValue = String(parsed.value.valueString);
+                              } else if (typeof parsed.value !== 'object') {
+                                displayValue = String(parsed.value);
+                              }
+                            }
+                          } catch (e) {
+                            // Not JSON or couldn't parse - use as is
+                          }
+                        }
+
+                        // Truncate very long values
+                        const truncatedValue = displayValue.length > 100 
+                          ? displayValue.substring(0, 100) + '...' 
+                          : displayValue;
+
+                        return (
+                          <div key={index} className="flex justify-between items-start py-2 border-b border-gray-100">
+                            <span className="font-medium text-sm mr-4 min-w-[150px]">{field.fieldName}:</span>
+                            <div className="text-right flex-1">
+                              <span className="text-sm break-words" title={displayValue}>
+                                {truncatedValue}
+                              </span>
+                              <div className={`text-xs mt-1 ${getConfidenceColor(field.confidence)}`}>
+                                {Math.round(field.confidence * 100)}% confidence
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
-                    <p className="text-muted-foreground text-center py-8">
-                      No extracted data available for this document.
-                    </p>
+                    <div className="text-center py-8">
+                      <p className="text-muted-foreground mb-2">
+                        No extracted data available for this document.
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        This may indicate the document was processed but no fields were recognized,
+                        or the document format wasn't compatible with the selected document type.
+                      </p>
+                    </div>
                   )}
                 </div>
               </motion.div>
