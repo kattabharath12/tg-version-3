@@ -1,4 +1,3 @@
-
 // ████████████████████████████████████████████████████████████████████████████████████████
 // █ INDUSTRY-STANDARD TAX CALCULATION ENGINE - 2025 TAX YEAR                           █
 // █ Following IRS Publication 17 and Federal Tax Code                                  █
@@ -263,29 +262,29 @@ export function calculateComprehensiveTax(
 
   // PHASE 1: Income Collection and Validation
   console.log('📊 PHASE 1: Income Collection and Validation');
-  
+
   const phase1_IncomeCollection = {
     // W-2 Income (Box 1 - Wages, tips, compensation)
     w2Income: extractedTaxData.income.wages || 0,
-    
+  
     // 1099-INT Income (Boxes 1, 3)
     form1099INT: extractedTaxData.income.interest || 0,
-    
+  
     // 1099-DIV Income (Box 1a - Total ordinary dividends)
     form1099DIV: extractedTaxData.income.dividends || 0,
-    
+  
     // 1099-NEC Income (Box 1 - Nonemployee compensation)
     form1099NEC: extractedTaxData.income.nonEmployeeCompensation || 0,
-    
+  
     // 1099-MISC Income (Boxes 1,2,3,5,6,8,9,10,11,12)
     form1099MISC: extractedTaxData.income.miscellaneousIncome + 
                   extractedTaxData.income.rentalRoyalties +
                   extractedTaxData.income.other || 0,
-    
+  
     // Preferentially Taxed Income
     qualifiedDividends: 0, // Would need to extract from 1099-DIV Box 1b
     capitalGains: 0,       // Would need capital gain distributions from 1099-DIV Box 2a
-    
+  
     // Tax-Exempt Income (reported but not taxable)
     taxExemptInterest: 0   // Would need from 1099-INT Box 8
   };
@@ -298,7 +297,7 @@ export function calculateComprehensiveTax(
 
   // PHASE 2: Income Aggregation and Classification
   console.log('📊 PHASE 2: Income Aggregation and Classification');
-  
+
   const phase2_IncomeAggregation = {
     totalOrdinaryIncome: 
       phase1_IncomeCollection.w2Income +
@@ -306,11 +305,11 @@ export function calculateComprehensiveTax(
       phase1_IncomeCollection.form1099DIV +
       phase1_IncomeCollection.form1099NEC +
       phase1_IncomeCollection.form1099MISC,
-    
+  
     totalPreferentialIncome:
       phase1_IncomeCollection.qualifiedDividends +
       phase1_IncomeCollection.capitalGains,
-    
+  
     totalTaxExemptIncome:
       phase1_IncomeCollection.taxExemptInterest
   };
@@ -320,16 +319,16 @@ export function calculateComprehensiveTax(
 
   // PHASE 3: Adjusted Gross Income (AGI) Calculation
   console.log('📊 PHASE 3: Adjusted Gross Income (AGI) Calculation');
-  
+
   // Calculate Self-Employment Tax Deduction (50% of SE tax)
   const seTaxDeduction = calculateSelfEmploymentTaxDeduction(phase1_IncomeCollection.form1099NEC, filingStatus);
-  
+
   const phase3_AdjustedGrossIncome = {
     totalIncome: phase2_IncomeAggregation.totalOrdinaryIncome + phase2_IncomeAggregation.totalPreferentialIncome,
     aboveTheLineDeductions: seTaxDeduction, // Could add IRA, HSA, etc. here
     adjustedGrossIncome: 0
   };
-  
+
   phase3_AdjustedGrossIncome.adjustedGrossIncome = Math.max(0, 
     phase3_AdjustedGrossIncome.totalIncome - phase3_AdjustedGrossIncome.aboveTheLineDeductions
   );
@@ -340,10 +339,10 @@ export function calculateComprehensiveTax(
 
   // PHASE 4: Deduction Determination
   console.log('📊 PHASE 4: Deduction Determination');
-  
+
   const standardDeductionAmount = STANDARD_DEDUCTION_2025[filingStatus] || STANDARD_DEDUCTION_2025.single;
   const selectedDeduction = useItemizedDeductions ? Math.max(itemizedDeductionAmount, standardDeductionAmount) : standardDeductionAmount;
-  
+
   const phase4_DeductionDetermination = {
     standardDeduction: standardDeductionAmount,
     itemizedDeductions: itemizedDeductionAmount,
@@ -356,7 +355,7 @@ export function calculateComprehensiveTax(
 
   // PHASE 5: Taxable Income Calculation
   console.log('📊 PHASE 5: Taxable Income Calculation');
-  
+
   const phase5_TaxableIncome = {
     agi: phase3_AdjustedGrossIncome.adjustedGrossIncome,
     deduction: phase4_DeductionDetermination.selectedDeduction,
@@ -367,7 +366,7 @@ export function calculateComprehensiveTax(
 
   // PHASE 6: Federal Income Tax Liability (Progressive Brackets)
   console.log('📊 PHASE 6: Federal Income Tax Liability');
-  
+
   const phase6_RegularTax = calculateProgressiveTax(phase5_TaxableIncome.taxableIncome, filingStatus);
 
   console.log(`  ✅ Regular Income Tax: $${phase6_RegularTax.ordinaryIncomeTax.toLocaleString()}`);
@@ -375,7 +374,7 @@ export function calculateComprehensiveTax(
 
   // PHASE 7: Self-Employment Tax Calculation
   console.log('📊 PHASE 7: Self-Employment Tax Calculation');
-  
+
   const phase7_SelfEmploymentTax = calculateSelfEmploymentTax(phase1_IncomeCollection.form1099NEC, filingStatus);
 
   console.log(`  ✅ Total SE Tax: $${phase7_SelfEmploymentTax.totalSETax.toLocaleString()}`);
@@ -383,7 +382,7 @@ export function calculateComprehensiveTax(
 
   // PHASE 8: Investment Tax (Preferential Rates & NIIT)
   console.log('📊 PHASE 8: Investment Tax Calculation');
-  
+
   const phase8_InvestmentTax = calculateInvestmentTax(
     phase1_IncomeCollection.qualifiedDividends,
     phase1_IncomeCollection.capitalGains,
@@ -396,7 +395,7 @@ export function calculateComprehensiveTax(
 
   // PHASE 9: Total Tax Liability
   console.log('📊 PHASE 9: Total Tax Liability');
-  
+
   const phase9_TotalTaxLiability = {
     regularTax: phase6_RegularTax.ordinaryIncomeTax,
     selfEmploymentTax: phase7_SelfEmploymentTax.totalSETax,
@@ -411,7 +410,7 @@ export function calculateComprehensiveTax(
 
   // PHASE 10: Withholdings and Credits
   console.log('📊 PHASE 10: Withholdings and Credits');
-  
+
   const phase10_WithholdingsAndCredits = {
     federalIncomeTax: extractedTaxData.withholdings.federalTax || 0,
     socialSecurityTax: extractedTaxData.withholdings.socialSecurityTax || 0,
@@ -427,10 +426,10 @@ export function calculateComprehensiveTax(
 
   // PHASE 11: Final Balance Calculation
   console.log('📊 PHASE 11: Final Balance Calculation');
-  
+
   const totalCredits = phase10_WithholdingsAndCredits.federalIncomeTax + estimatedTaxPayments;
   const balance = phase9_TotalTaxLiability.totalTax - totalCredits;
-  
+
   const phase11_FinalBalance = {
     totalTaxLiability: phase9_TotalTaxLiability.totalTax,
     totalWithholdings: phase10_WithholdingsAndCredits.federalIncomeTax,
@@ -579,9 +578,9 @@ function calculateInvestmentTax(
 ): InvestmentTaxBreakdown {
   const brackets = CAPITAL_GAINS_RATES_2025[filingStatus] || CAPITAL_GAINS_RATES_2025.single;
   const totalInvestmentIncome = qualifiedDividends + capitalGains;
-  
+
   let preferentialRateTax = 0;
-  
+
   // Calculate tax on qualified dividends and capital gains at preferential rates
   if (totalInvestmentIncome > 0) {
     for (const bracket of brackets) {
@@ -852,7 +851,7 @@ interface TaxDocumentSchema {
 // Enhanced extraction function specifically for structured schema format
 export function extractFromStructuredSchema(extractedData: any[], docType: string, fileName: string): TaxDocumentData {
   console.log(`🎯 STRUCTURED SCHEMA EXTRACTION: ${fileName} (${docType})`);
-  
+
   const result: TaxDocumentData = {
     income: { wages: 0, interest: 0, dividends: 0, nonEmployeeCompensation: 0, miscellaneousIncome: 0, rentalRoyalties: 0, other: 0 },
     withholdings: { federalTax: 0, stateTax: 0, socialSecurityTax: 0, medicareTax: 0 },
@@ -864,11 +863,11 @@ export function extractFromStructuredSchema(extractedData: any[], docType: strin
     // Look for structured schema data
     extractedData.forEach((field: any) => {
       console.log(`  🔍 Checking field: ${field.fieldName} = ${field.fieldValue}`);
-      
+    
       if (field.fieldValue) {
         try {
           const parsedValue = JSON.parse(field.fieldValue);
-          
+        
           // 1099-INT STRUCTURED SCHEMA
           if (docType === 'FORM_1099_INT' || docType.includes('INT')) {
             if (parsedValue?.form1099INT?.interestIncome?.value) {
@@ -878,7 +877,7 @@ export function extractFromStructuredSchema(extractedData: any[], docType: strin
               result.income.interest += value;
             }
           }
-          
+        
           // 1099-DIV STRUCTURED SCHEMA
           else if (docType === 'FORM_1099_DIV' || docType.includes('DIV')) {
             if (parsedValue?.form1099DIV?.totalOrdinaryDividends?.value) {
@@ -888,7 +887,7 @@ export function extractFromStructuredSchema(extractedData: any[], docType: strin
               result.income.dividends += value;
             }
           }
-          
+        
           // 1099-NEC STRUCTURED SCHEMA
           else if (docType === 'FORM_1099_NEC' || docType.includes('NEC')) {
             if (parsedValue?.form1099NEC?.nonemployeeCompensation?.value) {
@@ -898,7 +897,7 @@ export function extractFromStructuredSchema(extractedData: any[], docType: strin
               result.income.nonEmployeeCompensation += value;
             }
           }
-          
+        
           // W-2 STRUCTURED SCHEMA
           else if (docType === 'W2' || docType.includes('W2')) {
             if (parsedValue?.w2?.wages?.value) {
@@ -920,7 +919,7 @@ export function extractFromStructuredSchema(extractedData: any[], docType: strin
   return result;
 }
 
-// UNIFIED TAX CALCULATION ENGINE - Used by both Dashboard and Filing Step  
+// UNIFIED TAX CALCULATION ENGINE - Used by both Dashboard and Filing Step
 export function getUnifiedTaxCalculation(
   extractedTaxData: TaxDocumentData, 
   personalInfo?: any,
@@ -940,9 +939,9 @@ export function getUnifiedTaxCalculation(
   }
 } {
   console.log('🏛️ UNIFIED TAX ENGINE: Starting calculation');
-  
+
   const filingStatus = normalizeFilingStatus(personalInfo?.filingStatus || 'single');
-  
+
   // Calculate Federal Tax using comprehensive engine
   const federalResult = calculateComprehensiveTax(
     extractedTaxData,
@@ -1025,19 +1024,19 @@ function normalizeFilingStatus(status: string): string {
 // Enhanced data extraction that works with Azure Document Intelligence format and new schema
 export function extractValueFromAzureField(fieldValue: any): { value: any, confidence: number } {
   if (!fieldValue) return { value: null, confidence: 0 };
-  
+
   try {
     let parsed = fieldValue;
     if (typeof fieldValue === 'string') {
       parsed = JSON.parse(fieldValue);
     }
-    
+  
     // Handle nested Azure Document Intelligence structure
     if (parsed && typeof parsed === 'object') {
       // Extract value and confidence
       let extractedValue = null;
       let confidence = parsed.confidence || 0;
-      
+    
       // Check for value.valueNumber (most common for numbers)
       if (parsed.value && typeof parsed.value.valueNumber === 'number') {
         extractedValue = parsed.value.valueNumber;
@@ -1062,13 +1061,13 @@ export function extractValueFromAzureField(fieldValue: any): { value: any, confi
       else {
         extractedValue = parsed;
       }
-      
+    
       return { value: extractedValue, confidence };
     }
-    
+  
     // Direct value
     return { value: parsed, confidence: 1.0 };
-    
+  
   } catch (e) {
     // If not JSON, return as-is
     return { value: fieldValue, confidence: 1.0 };
@@ -1099,7 +1098,7 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
       boxDetails: 'Tax year field - contains year (e.g., 2010), not a dollar amount to be summed'
     };
   }
-  
+
   if (fieldLower.includes('controlnumber') || fieldLower.includes('control_number')) {
     return {
       classification: 'ignore',
@@ -1109,7 +1108,7 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
       boxDetails: 'Control number - document identifier, not a dollar amount'
     };
   }
-  
+
   if (fieldLower.includes('w2copy') || fieldLower.includes('w2_copy') || fieldLower.includes('copy')) {
     return {
       classification: 'ignore',
@@ -1119,7 +1118,7 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
       boxDetails: 'W-2 copy designation (e.g., Copy B), not a dollar amount'
     };
   }
-  
+
   if (fieldLower.includes('w2formvariant') || fieldLower.includes('formvariant') || fieldLower.includes('form_variant')) {
     return {
       classification: 'ignore',
@@ -1129,7 +1128,7 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
       boxDetails: 'Form variant identifier, not a dollar amount'
     };
   }
-  
+
   if (fieldLower.includes('verificationcode') || fieldLower.includes('verification_code')) {
     return {
       classification: 'ignore',
@@ -1139,7 +1138,7 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
       boxDetails: 'Verification code - security field, not a dollar amount'
     };
   }
-  
+
   if (fieldLower.includes('employee') && !fieldLower.includes('compensation') && !fieldLower.includes('wages')) {
     return {
       classification: 'ignore',
@@ -1149,7 +1148,7 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
       boxDetails: 'Employee personal information (name, SSN, address), not a dollar amount'
     };
   }
-  
+
   if (fieldLower.includes('employer') && !fieldLower.includes('compensation') && !fieldLower.includes('wages')) {
     return {
       classification: 'ignore',
@@ -1159,7 +1158,7 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
       boxDetails: 'Employer information (name, EIN, address), not a dollar amount'
     };
   }
-  
+
   if (fieldLower.includes('allocatedtips')) {
     return {
       classification: 'ignore',
@@ -1169,7 +1168,7 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
       boxDetails: 'W-2 Box 8: Allocated tips - typically already included in Box 1 or not additional income'
     };
   }
-  
+
   if (fieldLower.includes('dependentcarebenefits')) {
     return {
       classification: 'ignore',
@@ -1179,7 +1178,7 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
       boxDetails: 'W-2 Box 10: Dependent care benefits - not taxable income'
     };
   }
-  
+
   if (fieldLower.includes('nonqualifiedplans')) {
     return {
       classification: 'ignore',
@@ -1189,7 +1188,7 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
       boxDetails: 'W-2 Box 11: Nonqualified plans - informational, not current year taxable income'
     };
   }
-  
+
   if (fieldLower.includes('isstatutoryemployee') || fieldLower.includes('isthirdpartysickpay') || 
       fieldLower.includes('isretirementplan') || fieldLower.includes('is_')) {
     return {
@@ -1200,7 +1199,7 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
       boxDetails: 'Boolean checkbox field - true/false indicator, not a dollar amount'
     };
   }
-  
+
   if (fieldLower.includes('additionalinfo') || fieldLower.includes('additional_info')) {
     return {
       classification: 'ignore',
@@ -1210,7 +1209,7 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
       boxDetails: 'Additional information field - contains complex/nested data, not a simple dollar amount'
     };
   }
-  
+
   if (fieldLower.includes('statetaxinfo') || fieldLower.includes('state_tax_info') ||
       fieldLower.includes('localtaxinfo') || fieldLower.includes('local_tax_info')) {
     return {
@@ -1221,7 +1220,7 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
       boxDetails: 'State/Local tax information structure - contains complex nested data, not a simple dollar amount'
     };
   }
-  
+
   if (fieldLower.includes('other') && value > 100000) {
     // 'Other' field with large value is likely not a valid amount
     return {
@@ -1263,7 +1262,7 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
         boxDetails: 'W-2 Box 1: Wages, tips, and other compensation (includes ALL employment income + tips)'
       };
     }
-    
+  
     // ALSO INCLUDE: Tips reported separately (if not already captured in Box 1)
     if (fieldLower.includes('socialsecuritytips') || fieldLower.includes('tips')) {
       return {
@@ -1274,7 +1273,7 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
         boxDetails: 'W-2 Box 7: Social Security tips (additional tips not reported in Box 1)'
       };
     }
-    
+  
     // DO NOT include in income (withholdings)
     if (fieldLower.includes('federalincometaxwithheld') || fieldLower.includes('federaltaxwithheld')) {
       return { classification: 'withholding', category: 'federalTax', box: 'Box 2', description: 'Federal tax withheld', boxDetails: 'Federal income tax withheld from wages (Box 2)' };
@@ -1307,7 +1306,7 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
     const box11Pattern = /(?:transactions_)?(?:\[0\]\.)?box11/;
     const box12Pattern = /(?:transactions_)?(?:\[0\]\.)?box12/;
     const box13Pattern = /(?:transactions_)?(?:\[0\]\.)?box13/;
-    
+  
     if (fieldLower.includes('interestincome') || box1Pattern.test(fieldLower)) {
       return {
         classification: 'income',
@@ -1390,7 +1389,7 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
     const box15Pattern = /(?:transactions_)?(?:\[0\]\.)?box15/;
     const box16Pattern = /(?:transactions_)?(?:\[0\]\.)?box16/;
     const box17Pattern = /(?:transactions_)?(?:\[0\]\.)?box17/;
-    
+  
     if (fieldLower.includes('earlywithdrawalpenalty') || box2Pattern.test(fieldLower)) {
       return { classification: 'ignore', category: 'ignore', box: 'Box 2', description: 'Early withdrawal penalty (not income)', boxDetails: '1099-INT Box 2: Early withdrawal penalty - penalty, not income' };
     }
@@ -1403,7 +1402,7 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
     if (fieldLower.includes('foreigntaxpaid') || box6Pattern.test(fieldLower)) {
       return { classification: 'ignore', category: 'ignore', box: 'Box 6', description: 'Foreign tax paid (credit)', boxDetails: '1099-INT Box 6: Foreign tax paid - tax credit, not income' };
     }
-    
+  
     // *** CRITICAL FIX FOR 1099-INT STATE BOXES ***
     if (fieldLower.includes('stateidentification') || fieldLower.includes('stateidentificationno') || 
         fieldLower.includes('stateidentificationnumber') || fieldLower.includes('stateid') || 
@@ -1416,7 +1415,7 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
         boxDetails: '1099-INT Box 16: State identification number - NOT a tax withholding amount' 
       };
     }
-    
+  
     // Box 17 - State tax withheld (THIS IS THE ACTUAL WITHHOLDING AMOUNT)
     if (fieldLower.includes('statetaxwithheld') || 
         (fieldLower.includes('state') && fieldLower.includes('withheld')) ||
@@ -1429,12 +1428,12 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
         boxDetails: '1099-INT Box 17: State income tax withheld' 
       };
     }
-    
+  
     // Box 14 - State payer's state number (also ignore)
     if (box14Pattern.test(fieldLower)) {
       return { classification: 'ignore', category: 'ignore', box: 'Box 14', description: 'Payer state number (not income)', boxDetails: '1099-INT Box 14: Payer state number - not income or withholding' };
     }
-    
+  
     // Box 15 - State income (also ignore - usually blank)
     if (box15Pattern.test(fieldLower)) {
       return { classification: 'ignore', category: 'ignore', box: 'Box 15', description: 'State income (usually blank)', boxDetails: '1099-INT Box 15: State income - usually blank' };
@@ -1457,7 +1456,7 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
     const box8Pattern = /(?:transactions_)?(?:\[0\]\.)?box8/;
     const box9Pattern = /(?:transactions_)?(?:\[0\]\.)?box9/;
     const box10Pattern = /(?:transactions_)?(?:\[0\]\.)?box10/;
-    
+  
     // INCLUDE in income
     if (fieldLower.includes('totalordinarydividends') || box1aPattern.test(fieldLower)) {
       return {
@@ -1572,11 +1571,11 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
     if (fieldLower.includes('qualifieddividends') || box1bPattern.test(fieldLower)) {
       return { classification: 'ignore', category: 'ignore', box: 'Box 1b', description: 'Qualified dividends (subset of 1a)', boxDetails: '1099-DIV Box 1b: Qualified dividends - subset of Box 1a, would double-count' };
     }
-    
+  
     const box4Pattern = /(?:transactions_)?(?:\[0\]\.)?box4/;
     const box6Pattern = /(?:transactions_)?(?:\[0\]\.)?box6/;
     const box7Pattern = /(?:transactions_)?(?:\[0\]\.)?box7/;
-    
+  
     if (fieldLower.includes('federaltaxwithheld') || box4Pattern.test(fieldLower)) {
       return { classification: 'withholding', category: 'federalTax', box: 'Box 4', description: 'Federal tax withheld', boxDetails: '1099-DIV Box 4: Federal income tax withheld' };
     }
@@ -1734,22 +1733,22 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
 // ENHANCED: Extract specific box values from complex nested transaction structures
 export function extractTaxBoxValuesFromComplexStructure(fieldValue: any, documentType: string): Array<{ boxName: string, value: number, confidence: number }> {
   const extractedBoxes: Array<{ boxName: string, value: number, confidence: number }> = [];
-  
+
   if (!fieldValue) return extractedBoxes;
-  
+
   try {
     let parsed = fieldValue;
     if (typeof fieldValue === 'string') {
       parsed = JSON.parse(fieldValue);
     }
-    
+  
     // Handle the complex structure from user examples:
     // { "type": "array", "value": [ { "type": "object", "value": { "Box1a": { "value": { "valueNumber": 193992 } } } } ] }
     if (parsed?.type === 'array' && parsed.value && Array.isArray(parsed.value)) {
       parsed.value.forEach((transaction: any, index: number) => {
         if (transaction?.type === 'object' && transaction.value) {
           const transactionData = transaction.value;
-          
+        
           // Extract box values based on document type
           if (documentType.toLowerCase().includes('div')) {
             // 1099-DIV boxes
@@ -1800,30 +1799,30 @@ export function extractTaxBoxValuesFromComplexStructure(fieldValue: any, documen
         }
       });
     }
-    
+  
     console.log(`📊 Extracted ${extractedBoxes.length} box values from ${documentType}:`, extractedBoxes);
-    
+  
   } catch (error) {
     console.warn(`⚠️ Failed to extract box values from complex structure:`, error);
   }
-  
+
   return extractedBoxes;
 }
 
 // Convert extracted value to number for financial calculations
 export function extractNumberFromField(fieldValue: any): number {
   const extracted = extractValueFromAzureField(fieldValue);
-  
+
   if (typeof extracted.value === 'number') {
     return extracted.value;
   }
-  
+
   if (typeof extracted.value === 'string') {
     const numStr = extracted.value.replace(/[^0-9.-]/g, '');
     const num = parseFloat(numStr);
     return isNaN(num) ? 0 : num;
   }
-  
+
   return 0;
 }
 
@@ -1890,7 +1889,7 @@ export function extractTaxDataFromDocuments(documents: Array<{
   }>;
   confidence?: number | null;
 }>): TaxDocumentData {
-  
+
   const taxData: TaxDocumentData = {
     income: {
       wages: 0,                    // W-2 Box 1 ONLY
@@ -1927,7 +1926,7 @@ export function extractTaxDataFromDocuments(documents: Array<{
     }
 
     console.log(`\n📄 PROCESSING: ${doc.fileName} (${doc.documentType}) - ${doc.extractedData.length} fields`);
-    
+  
     const docBreakdown = {
       id: doc.id,
       fileName: doc.fileName,
@@ -1949,10 +1948,10 @@ export function extractTaxDataFromDocuments(documents: Array<{
 
       // Classify this field using senior tax accountant rules
       const classification = classifyTaxField(field.fieldName, numericValue, doc.documentType);
-      
+    
       // Create unique key for this field-box-amount combination to prevent duplicates
       const fieldBoxKey = `${doc.documentType}_${classification.box}_${numericValue}`;
-      
+    
       console.log(`  🔍 ${field.fieldName} = $${numericValue.toLocaleString()} → ${classification.classification}(${classification.category}) [${classification.box}] {${classification.boxDetails}}`);
 
       // Skip if we've already processed this exact field-box-amount combination
@@ -2089,7 +2088,7 @@ export function extractTaxDataFromDocuments(documents: Array<{
   console.log('');
   console.log('✅ VALIDATION CHECKLIST:');
   console.log('   ✅ No withholding amounts included in income totals');
-  console.log('   ✅ All primary income boxes captured per IRS rules');  
+  console.log('   ✅ All primary income boxes captured per IRS rules');
   console.log('   ✅ No double-counting (Box 1b excluded from Box 1a)');
   console.log('   ✅ Withholdings properly categorized and separated');
   console.log('██████████████████████████████████████████████████████████');
@@ -2104,14 +2103,14 @@ export function calculateIncomeFromDocuments(extractedDataArray: Array<{
   confidence: number;
 }>[]): number {
   console.warn('Using legacy calculateIncomeFromDocuments - consider using extractTaxDataFromDocuments instead');
-  
+
   let totalIncome = 0;
 
   extractedDataArray.forEach(documentData => {
     documentData.forEach(field => {
       if (field.fieldValue && field.confidence > 0.3) {
         const numericValue = extractNumberFromField(field.fieldValue);
-        
+      
         // Common income field names from various tax documents
         const fieldNameLower = field.fieldName.toLowerCase();
         const isIncomeField = fieldNameLower.includes('wages') ||
