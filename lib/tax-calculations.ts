@@ -1905,6 +1905,9 @@ export interface TaxDocumentData {
     name: string;
     ssn: string;
     address: string;
+    employerName?: string;
+    employerEIN?: string;
+    employerAddress?: string;
   };
   breakdown: {
     byDocument: Array<{
@@ -1969,6 +1972,9 @@ export function extractTaxDataFromDocuments(documents: Array<{
       name: '',
       ssn: '',
       address: '',
+      employerName: '',
+      employerEIN: '',
+      employerAddress: '',
     },
     breakdown: {
       byDocument: []
@@ -1998,7 +2004,181 @@ export function extractTaxDataFromDocuments(documents: Array<{
     // ENHANCED: Track processed field-box combinations to prevent duplicates
     const processedFieldBoxes = new Set<string>();
 
-    // CRITICAL: Process all fields with enhanced duplicate detection
+    // EXTRACT PERSONAL INFORMATION FIELDS FIRST (before numeric checks)
+    doc.extractedData.forEach((field) => {
+      if (!field.fieldValue || (field.confidence || 0) < 0.3) return;
+      
+      const fieldLower = field.fieldName.toLowerCase();
+      
+      // Extract Employee/Recipient Information (Name, SSN, Address)
+      // These are NON-NUMERIC fields, so we process them separately
+      if (fieldLower === 'employee' || fieldLower === 'recipient') {
+        // This is a complex nested object containing Name, SSN, and Address
+        const extracted = extractValueFromAzureField(field.fieldValue);
+        
+        if (extracted.value && typeof extracted.value === 'object') {
+          const employeeObj = extracted.value;
+          
+          // Extract Name from nested structure
+          if (employeeObj.Name && !taxData.personalInfo.name) {
+            let name = null;
+            if (typeof employeeObj.Name === 'string') {
+              name = employeeObj.Name;
+            } else if (employeeObj.Name.value) {
+              if (typeof employeeObj.Name.value === 'string') {
+                name = employeeObj.Name.value;
+              } else if (employeeObj.Name.value.valueString) {
+                name = employeeObj.Name.value.valueString;
+              }
+            } else if (employeeObj.Name.valueString) {
+              name = employeeObj.Name.valueString;
+            }
+            
+            if (name) {
+              taxData.personalInfo.name = name;
+              console.log(`    👤 PERSONAL INFO: Employee Name = ${name}`);
+            }
+          }
+          
+          // Extract SSN/TIN from nested structure
+          if ((employeeObj.SocialSecurityNumber || employeeObj.TaxIdNumber) && !taxData.personalInfo.ssn) {
+            const ssnField = employeeObj.SocialSecurityNumber || employeeObj.TaxIdNumber;
+            let ssn = null;
+            
+            if (typeof ssnField === 'string') {
+              ssn = ssnField;
+            } else if (ssnField.value) {
+              if (typeof ssnField.value === 'string') {
+                ssn = ssnField.value;
+              } else if (ssnField.value.valueString) {
+                ssn = ssnField.value.valueString;
+              }
+            } else if (ssnField.valueString) {
+              ssn = ssnField.valueString;
+            }
+            
+            if (ssn) {
+              taxData.personalInfo.ssn = ssn;
+              console.log(`    👤 PERSONAL INFO: Employee SSN = ${ssn.replace(/\d(?=\d{4})/g, '*')}`);
+            }
+          }
+          
+          // Extract Address from nested structure
+          if (employeeObj.Address && !taxData.personalInfo.address) {
+            let addressValue = null;
+            const addrField = employeeObj.Address;
+            
+            if (typeof addrField === 'string') {
+              addressValue = addrField;
+            } else if (addrField.value) {
+              const addrObj = addrField.value;
+              if (typeof addrObj === 'string') {
+                addressValue = addrObj;
+              } else if (typeof addrObj === 'object') {
+                const parts = [];
+                if (addrObj.streetAddress) parts.push(addrObj.streetAddress);
+                if (addrObj.city) parts.push(addrObj.city);
+                if (addrObj.state) parts.push(addrObj.state);
+                if (addrObj.postalCode) parts.push(addrObj.postalCode);
+                if (parts.length > 0) {
+                  addressValue = parts.join(', ');
+                }
+              }
+            }
+            
+            if (addressValue) {
+              taxData.personalInfo.address = addressValue;
+              console.log(`    👤 PERSONAL INFO: Employee Address = ${addressValue}`);
+            }
+          }
+        }
+      }
+      
+      // Extract Employer/Payer Information (Name, EIN, Address)
+      if (fieldLower === 'employer' || fieldLower === 'payer') {
+        // This is a complex nested object containing Name, EIN/IdNumber, and Address
+        const extracted = extractValueFromAzureField(field.fieldValue);
+        
+        if (extracted.value && typeof extracted.value === 'object') {
+          const employerObj = extracted.value;
+          
+          // Extract Employer Name from nested structure
+          if (employerObj.Name && !taxData.personalInfo.employerName) {
+            let name = null;
+            if (typeof employerObj.Name === 'string') {
+              name = employerObj.Name;
+            } else if (employerObj.Name.value) {
+              if (typeof employerObj.Name.value === 'string') {
+                name = employerObj.Name.value;
+              } else if (employerObj.Name.value.valueString) {
+                name = employerObj.Name.value.valueString;
+              }
+            } else if (employerObj.Name.valueString) {
+              name = employerObj.Name.valueString;
+            }
+            
+            if (name) {
+              taxData.personalInfo.employerName = name;
+              console.log(`    🏢 PERSONAL INFO: Employer/Payer Name = ${name}`);
+            }
+          }
+          
+          // Extract EIN/IdNumber from nested structure
+          if ((employerObj.IdNumber || employerObj.EIN) && !taxData.personalInfo.employerEIN) {
+            const einField = employerObj.IdNumber || employerObj.EIN;
+            let ein = null;
+            
+            if (typeof einField === 'string') {
+              ein = einField;
+            } else if (einField.value) {
+              if (typeof einField.value === 'string') {
+                ein = einField.value;
+              } else if (einField.value.valueString) {
+                ein = einField.value.valueString;
+              }
+            } else if (einField.valueString) {
+              ein = einField.valueString;
+            }
+            
+            if (ein) {
+              taxData.personalInfo.employerEIN = ein;
+              console.log(`    🏢 PERSONAL INFO: Employer/Payer EIN = ${ein}`);
+            }
+          }
+          
+          // Extract Address from nested structure
+          if (employerObj.Address && !taxData.personalInfo.employerAddress) {
+            let addressValue = null;
+            const addrField = employerObj.Address;
+            
+            if (typeof addrField === 'string') {
+              addressValue = addrField;
+            } else if (addrField.value) {
+              const addrObj = addrField.value;
+              if (typeof addrObj === 'string') {
+                addressValue = addrObj;
+              } else if (typeof addrObj === 'object') {
+                const parts = [];
+                if (addrObj.streetAddress) parts.push(addrObj.streetAddress);
+                if (addrObj.city) parts.push(addrObj.city);
+                if (addrObj.state) parts.push(addrObj.state);
+                if (addrObj.postalCode) parts.push(addrObj.postalCode);
+                if (parts.length > 0) {
+                  addressValue = parts.join(', ');
+                }
+              }
+            }
+            
+            if (addressValue) {
+              taxData.personalInfo.employerAddress = addressValue;
+              console.log(`    🏢 PERSONAL INFO: Employer/Payer Address = ${addressValue}`);
+            }
+          }
+        }
+      }
+    });
+
+    // NOW PROCESS INCOME AND WITHHOLDING FIELDS
     doc.extractedData.forEach((field) => {
       if (!field.fieldValue || (field.confidence || 0) < 0.3) return;
 
@@ -2145,11 +2325,20 @@ export function extractTaxDataFromDocuments(documents: Array<{
   console.log('   ────────────────────────────────────────────────────');
   console.log(`   💰 TOTAL WITHHOLDINGS: $${totalWithholdingsCalculated.toLocaleString()}`);
   console.log('');
+  console.log('👤 PERSONAL INFORMATION SUMMARY:');
+  console.log(`   Employee Name: ${taxData.personalInfo.name || '(not extracted)'}`);
+  console.log(`   Employee SSN: ${taxData.personalInfo.ssn ? taxData.personalInfo.ssn.replace(/\d(?=\d{4})/g, '*') : '(not extracted)'}`);
+  console.log(`   Employee Address: ${taxData.personalInfo.address || '(not extracted)'}`);
+  console.log(`   Employer Name: ${taxData.personalInfo.employerName || '(not extracted)'}`);
+  console.log(`   Employer EIN: ${taxData.personalInfo.employerEIN || '(not extracted)'}`);
+  console.log(`   Employer Address: ${taxData.personalInfo.employerAddress || '(not extracted)'}`);
+  console.log('');
   console.log('✅ VALIDATION CHECKLIST:');
   console.log('   ✅ No withholding amounts included in income totals');
   console.log('   ✅ All primary income boxes captured per IRS rules');  
   console.log('   ✅ No double-counting (Box 1b excluded from Box 1a)');
   console.log('   ✅ Withholdings properly categorized and separated');
+  console.log('   ✅ Personal information extracted from documents');
   console.log('██████████████████████████████████████████████████████████');
 
   return taxData;
