@@ -1,91 +1,99 @@
+
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth-options";
+import { prisma } from "@/lib/db";
 import { getFile } from "@/lib/file-storage";
-import { getAzureClient, getAzureModelId } from "@/lib/azure-client";
+import { getAzureClient } from "@/lib/azure-client";
+
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('🔄 Process document request received');
-    
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
     const { documentId } = body;
 
     if (!documentId) {
-      console.error('❌ No document ID provided');
       return NextResponse.json(
         { error: "Document ID is required" },
         { status: 400 }
       );
     }
 
-    console.log(`📋 Processing document: ${documentId}`);
-
     // Get document from database
-    const document = await prisma.document.findUnique({
-      where: { id: documentId }
+    const document = await prisma.document.findFirst({
+      where: {
+        id: documentId,
+        userId: session.user.id,
+      }
     });
 
     if (!document) {
-      console.error(`❌ Document not found: ${documentId}`);
       return NextResponse.json(
         { error: "Document not found" },
         { status: 404 }
       );
     }
 
-    console.log(`📄 Found document: ${document.fileName}`);
-
     // Update status to processing
     await prisma.document.update({
       where: { id: documentId },
       data: { processingStatus: "PROCESSING" }
     });
-    
-    console.log(`⏳ Status updated to PROCESSING`);
 
     try {
       // Read file from local storage
-      console.log(`📂 Loading file from storage: ${document.cloudStoragePath}`);
       const fileBuffer = await getFile(document.cloudStoragePath);
-      console.log(`✅ File loaded successfully (${fileBuffer.length} bytes)`);
 
-      // Process with Azure Document Intelligence
-      console.log(`🔵 Initializing Azure client...`);
+      // Get the Azure client instance
       const azureClient = getAzureClient();
-      
-      // Map document type to Azure model ID
-      const azureModelId = getAzureModelId(document.documentType);
-      console.log(`📄 Document type: ${document.documentType} → Azure model: ${azureModelId}`);
-      
+
+      // Process with Azure Document Intelligence using filename for better model selection
       const result = await azureClient.analyzeDocument(
         fileBuffer, 
-        azureModelId
+        document.documentType, 
+        document.fileName || 'document.pdf'
       );
-      
-      console.log(`✅ Azure analysis completed`);
       const extractedFields = azureClient.extractFieldsFromResult(result);
       
       console.log(`🎯 Processing results for ${document.fileName}:`);
-      console.log(`   - Model used: ${result.modelUsed}`);
-      console.log(`   - Documents found: ${result.documents?.length || 0}`);
-      console.log(`   - Total fields extracted: ${extractedFields.length}`);
+      console.log(`- Model used: ${result.modelUsed}`);
+      console.log(`- Documents found: ${result.documents?.length || 0}`);
+      console.log(`- Total fields extracted: ${extractedFields.length}`);
+
+      // Validate that we have extracted data
+      if (extractedFields.length === 0) {
+        console.warn(`⚠️ Warning: No fields extracted from ${document.fileName}`);
+        console.warn(`- Document type: ${document.documentType}`);
+        console.warn(`- Model used: ${result.modelUsed}`);
+        console.warn(`- This may indicate an issue with the document or model selection`);
+      } else {
+        console.log(`✅ Successfully extracted ${extractedFields.length} fields`);
+        console.log(`📋 Field names: ${extractedFields.map(f => f.fieldName).join(', ')}`);
+      }
 
       // Save extracted data to database
-      console.log(`💾 Saving ${extractedFields.length} fields to database...`);
-      const extractedDataPromises = extractedFields.map(field =>
-        prisma.extractedData.create({
+      const extractedDataPromises = extractedFields.map((field, index) => {
+        console.log(`  💾 Saving field ${index + 1}/${extractedFields.length}: ${field.fieldName} = ${field.fieldValue?.substring(0, 50)}${field.fieldValue && field.fieldValue.length > 50 ? '...' : ''}`);
+        
+        return prisma.extractedData.create({
           data: {
             documentId: document.id,
             fieldName: field.fieldName,
             fieldValue: field.fieldValue,
             confidence: field.confidence,
           }
-        })
-      );
+        });
+      });
 
       await Promise.all(extractedDataPromises);
-      console.log(`✅ All fields saved to database`);
+      
+      console.log(`✅ Successfully saved ${extractedFields.length} extracted fields to database`);
 
       // Calculate overall confidence from documents
       const overallConfidence = result.documents.length > 0 
@@ -103,8 +111,6 @@ export async function POST(request: NextRequest) {
           confidence: overallConfidence
         }
       });
-      
-      console.log(`✅ Document processing completed successfully!`);
 
       return NextResponse.json({
         message: "Document processed successfully",
@@ -112,8 +118,7 @@ export async function POST(request: NextRequest) {
       });
 
     } catch (processingError) {
-      console.error("❌ Processing error:", processingError);
-      console.error("❌ Error details:", processingError instanceof Error ? processingError.message : String(processingError));
+      console.error("Processing error:", processingError);
       
       // Update document status to failed
       await prisma.document.update({
@@ -125,15 +130,14 @@ export async function POST(request: NextRequest) {
       });
 
       return NextResponse.json(
-        { error: "Document processing failed", details: processingError instanceof Error ? processingError.message : String(processingError) },
+        { error: "Document processing failed" },
         { status: 500 }
       );
     }
   } catch (error) {
-    console.error("❌ Process document error:", error);
-    console.error("❌ Error details:", error instanceof Error ? error.message : String(error));
+    console.error("Process document error:", error);
     return NextResponse.json(
-      { error: "Internal server error", details: error instanceof Error ? error.message : String(error) },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }
