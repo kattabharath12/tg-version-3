@@ -1088,6 +1088,151 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
 
   console.log(`🏛️ SENIOR TAX ACCOUNTANT: Classifying ${fieldName} = $${value} from ${documentType}`);
 
+  // ======= METADATA FIELDS (ALWAYS IGNORE - NOT DOLLAR AMOUNTS) =======
+  // These fields should be ignored regardless of document type
+  if (fieldLower.includes('taxyear') || fieldLower.includes('tax_year')) {
+    return {
+      classification: 'ignore',
+      category: 'metadata',
+      box: 'Metadata',
+      description: 'Tax year (not a dollar amount)',
+      boxDetails: 'Tax year field - contains year (e.g., 2010), not a dollar amount to be summed'
+    };
+  }
+  
+  if (fieldLower.includes('controlnumber') || fieldLower.includes('control_number')) {
+    return {
+      classification: 'ignore',
+      category: 'metadata',
+      box: 'Metadata',
+      description: 'Control number (not a dollar amount)',
+      boxDetails: 'Control number - document identifier, not a dollar amount'
+    };
+  }
+  
+  if (fieldLower.includes('w2copy') || fieldLower.includes('w2_copy') || fieldLower.includes('copy')) {
+    return {
+      classification: 'ignore',
+      category: 'metadata',
+      box: 'Metadata',
+      description: 'Copy designation (not a dollar amount)',
+      boxDetails: 'W-2 copy designation (e.g., Copy B), not a dollar amount'
+    };
+  }
+  
+  if (fieldLower.includes('w2formvariant') || fieldLower.includes('formvariant') || fieldLower.includes('form_variant')) {
+    return {
+      classification: 'ignore',
+      category: 'metadata',
+      box: 'Metadata',
+      description: 'Form variant (not a dollar amount)',
+      boxDetails: 'Form variant identifier, not a dollar amount'
+    };
+  }
+  
+  if (fieldLower.includes('verificationcode') || fieldLower.includes('verification_code')) {
+    return {
+      classification: 'ignore',
+      category: 'metadata',
+      box: 'Metadata',
+      description: 'Verification code (not a dollar amount)',
+      boxDetails: 'Verification code - security field, not a dollar amount'
+    };
+  }
+  
+  if (fieldLower.includes('employee') && !fieldLower.includes('compensation') && !fieldLower.includes('wages')) {
+    return {
+      classification: 'ignore',
+      category: 'metadata',
+      box: 'Metadata',
+      description: 'Employee information (not a dollar amount)',
+      boxDetails: 'Employee personal information (name, SSN, address), not a dollar amount'
+    };
+  }
+  
+  if (fieldLower.includes('employer') && !fieldLower.includes('compensation') && !fieldLower.includes('wages')) {
+    return {
+      classification: 'ignore',
+      category: 'metadata',
+      box: 'Metadata',
+      description: 'Employer information (not a dollar amount)',
+      boxDetails: 'Employer information (name, EIN, address), not a dollar amount'
+    };
+  }
+  
+  if (fieldLower.includes('allocatedtips')) {
+    return {
+      classification: 'ignore',
+      category: 'ignore',
+      box: 'Box 8',
+      description: 'Allocated tips (typically not reported as income)',
+      boxDetails: 'W-2 Box 8: Allocated tips - typically already included in Box 1 or not additional income'
+    };
+  }
+  
+  if (fieldLower.includes('dependentcarebenefits')) {
+    return {
+      classification: 'ignore',
+      category: 'ignore',
+      box: 'Box 10',
+      description: 'Dependent care benefits (not taxable income)',
+      boxDetails: 'W-2 Box 10: Dependent care benefits - not taxable income'
+    };
+  }
+  
+  if (fieldLower.includes('nonqualifiedplans')) {
+    return {
+      classification: 'ignore',
+      category: 'ignore',
+      box: 'Box 11',
+      description: 'Nonqualified plans (informational only)',
+      boxDetails: 'W-2 Box 11: Nonqualified plans - informational, not current year taxable income'
+    };
+  }
+  
+  if (fieldLower.includes('isstatutoryemployee') || fieldLower.includes('isthirdpartysickpay') || 
+      fieldLower.includes('isretirementplan') || fieldLower.includes('is_')) {
+    return {
+      classification: 'ignore',
+      category: 'metadata',
+      box: 'Metadata',
+      description: 'Boolean flag (not a dollar amount)',
+      boxDetails: 'Boolean checkbox field - true/false indicator, not a dollar amount'
+    };
+  }
+  
+  if (fieldLower.includes('additionalinfo') || fieldLower.includes('additional_info')) {
+    return {
+      classification: 'ignore',
+      category: 'metadata',
+      box: 'Metadata',
+      description: 'Additional information (complex data)',
+      boxDetails: 'Additional information field - contains complex/nested data, not a simple dollar amount'
+    };
+  }
+  
+  if (fieldLower.includes('statetaxinfo') || fieldLower.includes('state_tax_info') ||
+      fieldLower.includes('localtaxinfo') || fieldLower.includes('local_tax_info')) {
+    return {
+      classification: 'ignore',
+      category: 'metadata',
+      box: 'Metadata',
+      description: 'Tax info structure (complex data)',
+      boxDetails: 'State/Local tax information structure - contains complex nested data, not a simple dollar amount'
+    };
+  }
+  
+  if (fieldLower.includes('other') && value > 100000) {
+    // 'Other' field with large value is likely not a valid amount
+    return {
+      classification: 'ignore',
+      category: 'ignore',
+      box: 'Metadata',
+      description: 'Other field (likely metadata)',
+      boxDetails: '"Other" field with suspiciously large value - likely metadata or error'
+    };
+  }
+
   // ======= ENHANCED: Handle Transaction-based field names (Box1, Box1a, etc.) =======
   const handleTransactionBox = (boxPattern: RegExp, classification: any) => {
     if (boxPattern.test(fieldLower)) {
@@ -1097,7 +1242,13 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
   };
 
   // ======= W-2 FORM CLASSIFICATION =======
-  if (docType.includes('w2') || docType === 'w2') {
+  // Check for W-2 field names REGARDLESS of documentType (handles "OTHER" case)
+  if (docType.includes('w2') || docType === 'w2' || 
+      // Fallback: Check if field names indicate this is a W-2 document
+      fieldLower.includes('wagestipsandothercompensation') || 
+      fieldLower.includes('federalincometaxwithheld') ||
+      fieldLower.includes('socialsecuritywages') ||
+      fieldLower.includes('medicarewagesandtips')) {
     // INCLUDE in income: Box 1 - Wages, tips, other compensation (W-2 PRIMARY INCOME FIELD)
     if (fieldLower.includes('wagestipsandothercompensation') || 
         fieldLower.includes('wagestipsothercompensation') ||
