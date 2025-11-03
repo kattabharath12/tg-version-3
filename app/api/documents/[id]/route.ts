@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
@@ -6,46 +7,105 @@ import { deleteFile } from "@/lib/file-storage";
 
 export const dynamic = "force-dynamic";
 
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const documentId = params.id;
+
+    // Find the document with all extracted data
+    const document = await prisma.document.findFirst({
+      where: {
+        id: documentId,
+        userId: session.user.id,
+      },
+      include: {
+        extractedData: {
+          orderBy: {
+            createdAt: 'asc'
+          }
+        },
+      },
+    });
+
+    if (!document) {
+      return NextResponse.json(
+        { error: "Document not found or access denied" },
+        { status: 404 }
+      );
+    }
+
+    console.log(`📄 Fetched document ${document.fileName}:`);
+    console.log(`   - ID: ${document.id}`);
+    console.log(`   - Status: ${document.processingStatus}`);
+    console.log(`   - Extracted fields: ${document.extractedData.length}`);
+
+    return NextResponse.json({
+      document
+    });
+  } catch (error) {
+    console.error("Get document error:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch document" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const document = await prisma.document.findUnique({
-      where: { id: params.id },
+    const documentId = params.id;
+
+    // Find the document to ensure it belongs to the user
+    const document = await prisma.document.findFirst({
+      where: {
+        id: documentId,
+        userId: session.user.id,
+      },
     });
 
     if (!document) {
-      return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+      return NextResponse.json(
+        { error: "Document not found or access denied" },
+        { status: 404 }
+      );
     }
 
-    // Delete file from storage (with error handling)
+    // Delete the file from local storage
     try {
       await deleteFile(document.cloudStoragePath);
-    } catch (fileError: any) {
-      // If file doesn't exist (ENOENT), just log a warning and continue
-      if (fileError.code === 'ENOENT') {
-        console.warn(`File not found, skipping deletion: ${document.cloudStoragePath}`);
-      } else {
-        // For other errors, log but don't fail the deletion
-        console.error('Error deleting file from storage:', fileError);
-      }
-      // Continue with database deletion regardless of file deletion result
+    } catch (error) {
+      console.error("Error deleting file from storage:", error);
+      // Continue with database deletion even if file deletion fails
     }
 
-    // Delete from database
+    // Delete the document from the database (this will cascade delete extractedData)
     await prisma.document.delete({
-      where: { id: params.id },
+      where: { id: documentId },
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({
+      message: "Document deleted successfully",
+    });
   } catch (error) {
-    console.error('Delete error:', error);
-    return NextResponse.json({ error: 'Delete failed' }, { status: 500 });
+    console.error("Delete document error:", error);
+    return NextResponse.json(
+      { error: "Failed to delete document" },
+      { status: 500 }
+    );
   }
 }
