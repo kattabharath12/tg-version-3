@@ -1221,17 +1221,6 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
       boxDetails: 'State/Local tax information structure - contains complex nested data, not a simple dollar amount'
     };
   }
-  
-  if (fieldLower.includes('other') && value > 100000) {
-    // 'Other' field with large value is likely not a valid amount
-    return {
-      classification: 'ignore',
-      category: 'ignore',
-      box: 'Metadata',
-      description: 'Other field (likely metadata)',
-      boxDetails: '"Other" field with suspiciously large value - likely metadata or error'
-    };
-  }
 
   // ======= ENHANCED: Handle Transaction-based field names (Box1, Box1a, etc.) =======
   const handleTransactionBox = (boxPattern: RegExp, classification: any) => {
@@ -1241,59 +1230,128 @@ export function classifyTaxField(fieldName: string, value: number, documentType:
     return null;
   };
 
-  // ======= W-2 FORM CLASSIFICATION =======
-  // Check for W-2 field names REGARDLESS of documentType (handles "OTHER" case)
+  // ======= W-2 FORM CLASSIFICATION (PRIORITY - CHECK FIRST!) =======
+  // CRITICAL FIX: Check W-2 field names BEFORE "other" filter to avoid false positives
+  // W-2 field names may contain "other" (e.g., "WagesTipsAndOtherCompensation")
   if (docType.includes('w2') || docType === 'w2' || 
       // Fallback: Check if field names indicate this is a W-2 document
       fieldLower.includes('wagestipsandothercompensation') || 
       fieldLower.includes('federalincometaxwithheld') ||
       fieldLower.includes('socialsecuritywages') ||
       fieldLower.includes('medicarewagesandtips')) {
-    // INCLUDE in income: Box 1 - Wages, tips, other compensation (W-2 PRIMARY INCOME FIELD)
+    
+    // *** PRIORITY #1: Box 1 - Wages, tips, and other compensation (PRIMARY INCOME FIELD) ***
+    // This is the ONLY field that should be counted as W-2 income
     if (fieldLower.includes('wagestipsandothercompensation') || 
         fieldLower.includes('wagestipsothercompensation') ||
-        (fieldLower.includes('wages') && fieldLower.includes('tips')) ||
-        fieldLower.includes('wagesTipsAndOtherCompensation') ||
-        (fieldLower.includes('wages') && !fieldLower.includes('withheld') && !fieldLower.includes('tax') && !fieldLower.includes('social') && !fieldLower.includes('medicare'))) {
+        fieldLower === 'wages' || // Exact match for "wages" field
+        (fieldLower.includes('wages') && fieldLower.includes('tips') && fieldLower.includes('other'))) {
       return {
         classification: 'income',
         category: 'wages',
         box: 'Box 1',
         description: 'Wages, tips, and other compensation',
-        boxDetails: 'W-2 Box 1: Wages, tips, and other compensation (includes ALL employment income + tips)'
+        boxDetails: 'W-2 Box 1: Wages, tips, and other compensation (PRIMARY W-2 INCOME - includes ALL taxable compensation)'
       };
     }
     
-    // ALSO INCLUDE: Tips reported separately (if not already captured in Box 1)
-    if (fieldLower.includes('socialsecuritytips') || fieldLower.includes('tips')) {
-      return {
-        classification: 'income',
-        category: 'wages',
-        box: 'Box 7',
-        description: 'Social Security tips (if not included in Box 1)',
-        boxDetails: 'W-2 Box 7: Social Security tips (additional tips not reported in Box 1)'
+    // *** Box 3: Social Security Wages (IGNORE - different calculation basis) ***
+    if (fieldLower.includes('socialsecuritywages') && !fieldLower.includes('tips')) {
+      return { 
+        classification: 'ignore', 
+        category: 'ignore', 
+        box: 'Box 3', 
+        description: 'Social Security wages (different basis)', 
+        boxDetails: 'W-2 Box 3: Social Security wages - different calculation basis from Box 1, do not count as income' 
       };
     }
     
-    // DO NOT include in income (withholdings)
-    if (fieldLower.includes('federalincometaxwithheld') || fieldLower.includes('federaltaxwithheld')) {
-      return { classification: 'withholding', category: 'federalTax', box: 'Box 2', description: 'Federal tax withheld', boxDetails: 'Federal income tax withheld from wages (Box 2)' };
-    }
-    if (fieldLower.includes('socialsecuritywages')) {
-      return { classification: 'ignore', category: 'ignore', box: 'Box 3', description: 'Social Security wages (different basis)', boxDetails: 'Social Security wages - different from income calculation (Box 3)' };
-    }
+    // *** Box 4: Social Security Tax Withheld (WITHHOLDING) ***
     if (fieldLower.includes('socialsecuritytaxwithheld')) {
-      return { classification: 'withholding', category: 'socialSecurityTax', box: 'Box 4', description: 'Social Security tax withheld', boxDetails: 'Social Security tax withheld from wages (Box 4)' };
+      return { 
+        classification: 'withholding', 
+        category: 'socialSecurityTax', 
+        box: 'Box 4', 
+        description: 'Social Security tax withheld', 
+        boxDetails: 'W-2 Box 4: Social Security tax withheld from wages' 
+      };
     }
-    if (fieldLower.includes('medicarewages')) {
-      return { classification: 'ignore', category: 'ignore', box: 'Box 5', description: 'Medicare wages (different basis)', boxDetails: 'Medicare wages - different from income calculation (Box 5)' };
+    
+    // *** Box 5: Medicare Wages and Tips (IGNORE - different calculation basis) ***
+    if (fieldLower.includes('medicarewages') || 
+        (fieldLower.includes('medicare') && fieldLower.includes('wages') && fieldLower.includes('tips'))) {
+      return { 
+        classification: 'ignore', 
+        category: 'ignore', 
+        box: 'Box 5', 
+        description: 'Medicare wages and tips (different basis)', 
+        boxDetails: 'W-2 Box 5: Medicare wages and tips - different calculation basis from Box 1, do not count as income' 
+      };
     }
+    
+    // *** Box 6: Medicare Tax Withheld (WITHHOLDING) ***
     if (fieldLower.includes('medicaretaxwithheld')) {
-      return { classification: 'withholding', category: 'medicareTax', box: 'Box 6', description: 'Medicare tax withheld', boxDetails: 'Medicare tax withheld from wages (Box 6)' };
+      return { 
+        classification: 'withholding', 
+        category: 'medicareTax', 
+        box: 'Box 6', 
+        description: 'Medicare tax withheld', 
+        boxDetails: 'W-2 Box 6: Medicare tax withheld from wages' 
+      };
     }
+    
+    // *** Box 7: Social Security Tips (IGNORE - should already be in Box 1) ***
+    // Box 7 reports tips that are ALREADY included in Box 1, so counting it would be double-counting
+    if (fieldLower.includes('socialsecuritytips') || 
+        (fieldLower.includes('tips') && !fieldLower.includes('wages') && !fieldLower.includes('allocated'))) {
+      return {
+        classification: 'ignore',
+        category: 'ignore',
+        box: 'Box 7',
+        description: 'Social Security tips (already in Box 1)',
+        boxDetails: 'W-2 Box 7: Social Security tips - these tips are ALREADY included in Box 1 wages, do not double-count'
+      };
+    }
+    
+    // *** Box 2: Federal Income Tax Withheld (WITHHOLDING) ***
+    if (fieldLower.includes('federalincometaxwithheld') || fieldLower.includes('federaltaxwithheld')) {
+      return { 
+        classification: 'withholding', 
+        category: 'federalTax', 
+        box: 'Box 2', 
+        description: 'Federal tax withheld', 
+        boxDetails: 'W-2 Box 2: Federal income tax withheld from wages' 
+      };
+    }
+    
+    // *** State Tax Withheld (WITHHOLDING) ***
     if (fieldLower.includes('stateincometax') || fieldLower.includes('stateincome')) {
-      return { classification: 'withholding', category: 'stateTax', box: 'State', description: 'State income tax withheld', boxDetails: 'State income tax withheld from wages' };
+      return { 
+        classification: 'withholding', 
+        category: 'stateTax', 
+        box: 'State', 
+        description: 'State income tax withheld', 
+        boxDetails: 'State income tax withheld from wages' 
+      };
     }
+  }
+  
+  // ======= GENERIC "OTHER" FILTER (After W-2 checks!) =======
+  // Only apply this filter AFTER checking for legitimate W-2 field names
+  // This prevents "WagesTipsAndOtherCompensation" from being incorrectly filtered
+  if (fieldLower.includes('other') && 
+      !fieldLower.includes('wages') && 
+      !fieldLower.includes('tips') && 
+      !fieldLower.includes('compensation') &&
+      value > 100000) {
+    // 'Other' field with large value is likely not a valid amount
+    return {
+      classification: 'ignore',
+      category: 'ignore',
+      box: 'Unknown',
+      description: 'Generic "other" field (likely metadata)',
+      boxDetails: 'Generic "other" field with suspiciously large value - likely metadata or error'
+    };
   }
 
   // ======= 1099-INT FORM CLASSIFICATION (Enhanced for Transaction fields) =======
@@ -1847,9 +1905,9 @@ export interface TaxDocumentData {
     name: string;
     ssn: string;
     address: string;
-    employerName: string;
-    employerEIN: string;
-    employerAddress: string;
+    employerName?: string;
+    employerEIN?: string;
+    employerAddress?: string;
   };
   breakdown: {
     byDocument: Array<{
@@ -2267,19 +2325,20 @@ export function extractTaxDataFromDocuments(documents: Array<{
   console.log('   ────────────────────────────────────────────────────');
   console.log(`   💰 TOTAL WITHHOLDINGS: $${totalWithholdingsCalculated.toLocaleString()}`);
   console.log('');
-  console.log('✅ VALIDATION CHECKLIST:');
-  console.log('   ✅ No withholding amounts included in income totals');
-  console.log('   ✅ All primary income boxes captured per IRS rules');  
-  console.log('   ✅ No double-counting (Box 1b excluded from Box 1a)');
-  console.log('   ✅ Withholdings properly categorized and separated');
-  console.log('');
-  console.log('👤 PERSONAL INFORMATION EXTRACTED:');
+  console.log('👤 PERSONAL INFORMATION SUMMARY:');
   console.log(`   Employee Name: ${taxData.personalInfo.name || '(not extracted)'}`);
   console.log(`   Employee SSN: ${taxData.personalInfo.ssn ? taxData.personalInfo.ssn.replace(/\d(?=\d{4})/g, '*') : '(not extracted)'}`);
   console.log(`   Employee Address: ${taxData.personalInfo.address || '(not extracted)'}`);
   console.log(`   Employer Name: ${taxData.personalInfo.employerName || '(not extracted)'}`);
   console.log(`   Employer EIN: ${taxData.personalInfo.employerEIN || '(not extracted)'}`);
   console.log(`   Employer Address: ${taxData.personalInfo.employerAddress || '(not extracted)'}`);
+  console.log('');
+  console.log('✅ VALIDATION CHECKLIST:');
+  console.log('   ✅ No withholding amounts included in income totals');
+  console.log('   ✅ All primary income boxes captured per IRS rules');  
+  console.log('   ✅ No double-counting (Box 1b excluded from Box 1a)');
+  console.log('   ✅ Withholdings properly categorized and separated');
+  console.log('   ✅ Personal information extracted from documents');
   console.log('██████████████████████████████████████████████████████████');
 
   return taxData;
