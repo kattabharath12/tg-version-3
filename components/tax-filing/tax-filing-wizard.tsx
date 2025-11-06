@@ -248,85 +248,158 @@ export default function TaxFilingWizard() {
           if (fieldName === 'employee') {
             try {
               const employeeData = JSON.parse(rawFieldValue);
-              console.log(`📋 Employee data structure:`, employeeData);
+              console.log(`📋 Employee data structure (Confidence: ${employeeData?.confidence || 0}):`, employeeData);
               
-              // Extract name from nested structure
-              if (employeeData?.value?.Name?.value?.valueString) {
-                const fullName = employeeData.value.Name.value.valueString;
-                const nameParts = fullName.split(/\s+/);
-                if (nameParts.length >= 2 && !updatedTaxData.personalInfo.firstName) {
-                  updatedTaxData.personalInfo.firstName = nameParts[0];
-                  updatedTaxData.personalInfo.lastName = nameParts.slice(1).join(' ');
-                  fieldsExtracted += 2;
-                  console.log(`✅ Extracted name from Employee object: ${updatedTaxData.personalInfo.firstName} ${updatedTaxData.personalInfo.lastName}`);
+              // CRITICAL FIX: Accept employee data even with 0% confidence
+              // Azure Document Intelligence sometimes returns 0% confidence for Employee objects
+              // but the data is still valid and extractable
+              console.log(`🔧 FIX APPLIED: Processing employee data regardless of confidence level`);
+              
+              // Try multiple extraction paths for robustness
+              let nameExtracted = false;
+              let ssnExtracted = false;
+              let addressExtracted = false;
+              
+              // Extract name from nested structure - Try multiple paths
+              if (!updatedTaxData.personalInfo.firstName) {
+                // Path 1: Standard Azure nested structure
+                let fullName = employeeData?.value?.Name?.value?.valueString;
+                
+                // Path 2: Alternative nesting
+                if (!fullName) {
+                  fullName = employeeData?.value?.Name?.valueString;
+                }
+                
+                // Path 3: Direct value
+                if (!fullName && employeeData?.value?.Name) {
+                  fullName = employeeData.value.Name;
+                }
+                
+                // Path 4: Check if Name is directly on the object
+                if (!fullName && employeeData?.Name?.value?.valueString) {
+                  fullName = employeeData.Name.value.valueString;
+                }
+                
+                // Parse name if we found it
+                if (fullName && typeof fullName === 'string') {
+                  const { firstName, lastName } = parseName(fullName);
+                  if (firstName) {
+                    updatedTaxData.personalInfo.firstName = firstName;
+                    updatedTaxData.personalInfo.lastName = lastName || '';
+                    fieldsExtracted += 2;
+                    nameExtracted = true;
+                    console.log(`✅ Extracted name from Employee object: ${updatedTaxData.personalInfo.firstName} ${updatedTaxData.personalInfo.lastName} (from: ${fullName})`);
+                  }
                 }
               }
               
-              // Extract SSN from nested structure
-              if (employeeData?.value?.SocialSecurityNumber?.value?.valueString) {
-                const ssn = employeeData.value.SocialSecurityNumber.value.valueString;
-                if (!updatedTaxData.personalInfo.ssn) {
+              // Extract SSN from nested structure - Try multiple paths
+              if (!updatedTaxData.personalInfo.ssn) {
+                // Path 1: Standard Azure nested structure
+                let ssn = employeeData?.value?.SocialSecurityNumber?.value?.valueString;
+                
+                // Path 2: Alternative nesting
+                if (!ssn) {
+                  ssn = employeeData?.value?.SocialSecurityNumber?.valueString;
+                }
+                
+                // Path 3: Direct value
+                if (!ssn && employeeData?.value?.SocialSecurityNumber) {
+                  ssn = employeeData.value.SocialSecurityNumber;
+                }
+                
+                // Path 4: Check if SSN is directly on the object
+                if (!ssn && employeeData?.SocialSecurityNumber?.value?.valueString) {
+                  ssn = employeeData.SocialSecurityNumber.value.valueString;
+                }
+                
+                if (ssn && typeof ssn === 'string') {
                   updatedTaxData.personalInfo.ssn = ssn;
                   fieldsExtracted++;
+                  ssnExtracted = true;
                   console.log(`✅ Extracted SSN from Employee object: ${updatedTaxData.personalInfo.ssn}`);
                 }
               }
               
-              // Extract address from nested structure - Use individual components first
-              if (employeeData?.value?.Address?.value && !updatedTaxData.personalInfo.address) {
-                const addressData = employeeData.value.Address.value;
+              // Extract address from nested structure - Try multiple paths
+              if (!updatedTaxData.personalInfo.address) {
+                // Path 1: Standard Azure nested structure
+                let addressData = employeeData?.value?.Address?.value;
                 
-                // Use individual address components directly from Azure (most accurate)
-                if (addressData.streetAddress) {
-                  updatedTaxData.personalInfo.street = addressData.streetAddress;
-                  fieldsExtracted++;
-                  console.log(`✅ Extracted street from Azure components: ${updatedTaxData.personalInfo.street}`);
+                // Path 2: Alternative nesting
+                if (!addressData) {
+                  addressData = employeeData?.value?.Address;
                 }
                 
-                if (addressData.city) {
-                  updatedTaxData.personalInfo.city = addressData.city;
-                  fieldsExtracted++;
-                  console.log(`✅ Extracted city from Azure components: ${updatedTaxData.personalInfo.city}`);
+                // Path 3: Direct on object
+                if (!addressData && employeeData?.Address?.value) {
+                  addressData = employeeData.Address.value;
                 }
                 
-                if (addressData.state) {
-                  updatedTaxData.personalInfo.state = addressData.state;
-                  fieldsExtracted++;
-                  console.log(`✅ Extracted state from Azure components: ${updatedTaxData.personalInfo.state}`);
-                }
-                
-                if (addressData.postalCode) {
-                  updatedTaxData.personalInfo.zip = addressData.postalCode;
-                  fieldsExtracted++;
-                  console.log(`✅ Extracted zip from Azure components: ${updatedTaxData.personalInfo.zip}`);
-                }
-                
-                // Build full address for display if components exist
-                if (updatedTaxData.personalInfo.street || updatedTaxData.personalInfo.city || updatedTaxData.personalInfo.state || updatedTaxData.personalInfo.zip) {
-                  const addressParts = [];
-                  if (updatedTaxData.personalInfo.street) addressParts.push(updatedTaxData.personalInfo.street);
-                  if (updatedTaxData.personalInfo.city) addressParts.push(updatedTaxData.personalInfo.city);
-                  if (updatedTaxData.personalInfo.state) addressParts.push(updatedTaxData.personalInfo.state);
-                  if (updatedTaxData.personalInfo.zip) addressParts.push(updatedTaxData.personalInfo.zip);
-                  updatedTaxData.personalInfo.address = addressParts.join(', ');
-                  console.log(`✅ Built full address from Azure components: ${updatedTaxData.personalInfo.address}`);
-                }
-                
-                // Only fallback to parsing streetAddress if individual components aren't available
-                else if (addressData.streetAddress) {
-                  const fullAddress = addressData.streetAddress;
-                  updatedTaxData.personalInfo.address = fullAddress;
+                if (addressData) {
+                  // Use individual address components directly from Azure (most accurate)
+                  if (addressData.streetAddress) {
+                    updatedTaxData.personalInfo.street = addressData.streetAddress;
+                    fieldsExtracted++;
+                    addressExtracted = true;
+                    console.log(`✅ Extracted street from Azure components: ${updatedTaxData.personalInfo.street}`);
+                  }
                   
-                  // Parse address components as fallback
-                  const { street, city, state, zip } = parseAddressComponents(fullAddress);
-                  if (street) updatedTaxData.personalInfo.street = street;
-                  if (city) updatedTaxData.personalInfo.city = city;
-                  if (state) updatedTaxData.personalInfo.state = state;
-                  if (zip) updatedTaxData.personalInfo.zip = zip;
+                  if (addressData.city) {
+                    updatedTaxData.personalInfo.city = addressData.city;
+                    fieldsExtracted++;
+                    addressExtracted = true;
+                    console.log(`✅ Extracted city from Azure components: ${updatedTaxData.personalInfo.city}`);
+                  }
                   
-                  fieldsExtracted += street || city || state || zip ? 4 : 1;
-                  console.log(`✅ Fallback: Parsed address components from streetAddress: ${fullAddress}`);
+                  if (addressData.state) {
+                    updatedTaxData.personalInfo.state = addressData.state;
+                    fieldsExtracted++;
+                    addressExtracted = true;
+                    console.log(`✅ Extracted state from Azure components: ${updatedTaxData.personalInfo.state}`);
+                  }
+                  
+                  if (addressData.postalCode) {
+                    updatedTaxData.personalInfo.zip = addressData.postalCode;
+                    fieldsExtracted++;
+                    addressExtracted = true;
+                    console.log(`✅ Extracted zip from Azure components: ${updatedTaxData.personalInfo.zip}`);
+                  }
+                  
+                  // Build full address for display if components exist
+                  if (updatedTaxData.personalInfo.street || updatedTaxData.personalInfo.city || updatedTaxData.personalInfo.state || updatedTaxData.personalInfo.zip) {
+                    const addressParts = [];
+                    if (updatedTaxData.personalInfo.street) addressParts.push(updatedTaxData.personalInfo.street);
+                    if (updatedTaxData.personalInfo.city) addressParts.push(updatedTaxData.personalInfo.city);
+                    if (updatedTaxData.personalInfo.state) addressParts.push(updatedTaxData.personalInfo.state);
+                    if (updatedTaxData.personalInfo.zip) addressParts.push(updatedTaxData.personalInfo.zip);
+                    updatedTaxData.personalInfo.address = addressParts.join(', ');
+                    console.log(`✅ Built full address from Azure components: ${updatedTaxData.personalInfo.address}`);
+                  }
+                  
+                  // Only fallback to parsing streetAddress if individual components aren't available
+                  else if (addressData.streetAddress) {
+                    const fullAddress = addressData.streetAddress;
+                    updatedTaxData.personalInfo.address = fullAddress;
+                    
+                    // Parse address components as fallback
+                    const { street, city, state, zip } = parseAddressComponents(fullAddress);
+                    if (street) updatedTaxData.personalInfo.street = street;
+                    if (city) updatedTaxData.personalInfo.city = city;
+                    if (state) updatedTaxData.personalInfo.state = state;
+                    if (zip) updatedTaxData.personalInfo.zip = zip;
+                    
+                    fieldsExtracted += street || city || state || zip ? 4 : 1;
+                    console.log(`✅ Fallback: Parsed address components from streetAddress: ${fullAddress}`);
+                  }
                 }
+              }
+              
+              // Log extraction summary
+              if (nameExtracted || ssnExtracted || addressExtracted) {
+                console.log(`✅ Successfully extracted from Employee object (0% confidence workaround): Name=${nameExtracted}, SSN=${ssnExtracted}, Address=${addressExtracted}`);
+              } else {
+                console.warn(`⚠️ Employee object found but no data could be extracted. Structure:`, JSON.stringify(employeeData).substring(0, 200));
               }
             } catch (parseError) {
               console.warn(`⚠️ Failed to parse Employee object:`, parseError);
@@ -335,7 +408,9 @@ export default function TaxFilingWizard() {
           
           // Also check direct field mappings using Azure value extraction
           const extracted = extractValueFromAzureField(rawFieldValue);
-          if (extracted.value && extracted.confidence > 0.3) {
+          // CRITICAL FIX: Lowered confidence threshold from 0.3 to 0.0 to accept all data
+          if (extracted.value && extracted.confidence >= 0.0) {
+            console.log(`🔧 FIX APPLIED: Processing field with confidence ${extracted.confidence} (threshold: 0.0)`);
             
             // Extract wages for preview
             if (fieldName.includes('wagestipsandothercompensation') && 
@@ -374,12 +449,12 @@ export default function TaxFilingWizard() {
             // Extract personal info from the comprehensive API as fallback
             if (extractedTaxData.personalInfo) {
               if (extractedTaxData.personalInfo.name && !updatedTaxData.personalInfo.firstName) {
-                const nameParts = extractedTaxData.personalInfo.name.split(/\s+/);
-                if (nameParts.length >= 2) {
-                  updatedTaxData.personalInfo.firstName = nameParts[0];
-                  updatedTaxData.personalInfo.lastName = nameParts.slice(1).join(' ');
+                const { firstName, lastName } = parseName(extractedTaxData.personalInfo.name);
+                if (firstName) {
+                  updatedTaxData.personalInfo.firstName = firstName;
+                  updatedTaxData.personalInfo.lastName = lastName || '';
                   fieldsExtracted += 2;
-                  console.log(`✅ Extracted name from API: ${updatedTaxData.personalInfo.firstName} ${updatedTaxData.personalInfo.lastName}`);
+                  console.log(`✅ Extracted name from API: ${updatedTaxData.personalInfo.firstName} ${updatedTaxData.personalInfo.lastName} (from: ${extractedTaxData.personalInfo.name})`);
                 }
               }
               if (extractedTaxData.personalInfo.ssn && !updatedTaxData.personalInfo.ssn) {
@@ -485,6 +560,64 @@ export default function TaxFilingWizard() {
     const street = city ? beforeState.substring(0, beforeState.lastIndexOf(city)).replace(/,?\s*$/, '').trim() : beforeState;
     
     return { street, city, state, zip };
+  };
+
+  /**
+   * Parse full name into first name and last name components
+   * Handles common name formats:
+   * - "John Doe" -> { firstName: "John", lastName: "Doe" }
+   * - "Doe, John" -> { firstName: "John", lastName: "Doe" }
+   * - "John Middle Doe" -> { firstName: "John", lastName: "Middle Doe" }
+   * - "Doe, John Middle" -> { firstName: "John", lastName: "Doe Middle" }
+   */
+  const parseName = (fullName: string): { firstName: string; lastName: string } => {
+    if (!fullName || typeof fullName !== 'string') {
+      return { firstName: '', lastName: '' };
+    }
+    
+    const trimmedName = fullName.trim();
+    
+    // Handle "LastName, FirstName" format
+    if (trimmedName.includes(',')) {
+      const parts = trimmedName.split(',').map(p => p.trim());
+      if (parts.length >= 2) {
+        // parts[0] is last name, parts[1] is first name (and possibly middle name)
+        const lastName = parts[0];
+        const firstPart = parts[1];
+        
+        // If first part has multiple words, first word is first name, rest is middle name
+        const firstPartWords = firstPart.split(/\s+/);
+        if (firstPartWords.length > 1) {
+          return {
+            firstName: firstPartWords[0],
+            lastName: `${lastName} ${firstPartWords.slice(1).join(' ')}`
+          };
+        }
+        
+        return {
+          firstName: firstPart,
+          lastName: lastName
+        };
+      }
+    }
+    
+    // Handle "FirstName LastName" or "FirstName Middle LastName" format
+    const words = trimmedName.split(/\s+/);
+    if (words.length === 0) {
+      return { firstName: '', lastName: '' };
+    } else if (words.length === 1) {
+      // Only one word - treat as first name
+      return { firstName: words[0], lastName: '' };
+    } else if (words.length === 2) {
+      // Two words - first is first name, second is last name
+      return { firstName: words[0], lastName: words[1] };
+    } else {
+      // Three or more words - first is first name, rest is last name (including middle names)
+      return {
+        firstName: words[0],
+        lastName: words.slice(1).join(' ')
+      };
+    }
   };
 
   const nextStep = () => {
