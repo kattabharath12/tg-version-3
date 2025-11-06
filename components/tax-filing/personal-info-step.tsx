@@ -145,67 +145,228 @@ export default function PersonalInfoStep({ taxData, documents, updateTaxData }: 
           // W-2 Employee Structure
           if (sourceType === 'W2' && (fieldName === 'employee' || fieldName.includes('employee'))) {
             const employeeData = structuredData;
-            console.log(`📋 W-2 Employee data structure detected`);
+            console.log(`📋 W-2 Employee data structure detected (Confidence: ${employeeData?.confidence || 0})`);
             
-            // Extract name from nested W-2 structure
-            if (employeeData?.value?.Name?.value?.valueString && !personalInfo.firstName) {
-              const fullName = employeeData.value.Name.value.valueString;
-              const nameParts = fullName.split(/\s+/);
-              if (nameParts.length >= 2) {
-                personalInfo.firstName = nameParts[0];
-                personalInfo.lastName = nameParts.slice(1).join(' ');
-                fieldsUpdated += 2;
-                console.log(`✅ W-2 Name: ${personalInfo.firstName} ${personalInfo.lastName}`);
+            // CRITICAL FIX: Accept employee data even with 0% confidence
+            // Azure Document Intelligence sometimes returns 0% confidence for Employee objects
+            // but the data is still valid and extractable
+            console.log(`🔧 FIX APPLIED: Processing employee data regardless of confidence level`);
+            
+            // Try multiple extraction paths for robustness
+            let nameExtracted = false;
+            let ssnExtracted = false;
+            let addressExtracted = false;
+            
+            // Extract name from nested W-2 structure - Try multiple paths
+            if (!personalInfo.firstName) {
+              // Path 1: Standard Azure nested structure
+              let fullName = employeeData?.value?.Name?.value?.valueString;
+              
+              // Path 2: Alternative nesting (sometimes Azure uses different structures)
+              if (!fullName) {
+                fullName = employeeData?.value?.Name?.valueString;
+              }
+              
+              // Path 3: Direct value
+              if (!fullName && employeeData?.value?.Name) {
+                fullName = employeeData.value.Name;
+              }
+              
+              // Path 4: Check if Name is directly on the object
+              if (!fullName && employeeData?.Name?.value?.valueString) {
+                fullName = employeeData.Name.value.valueString;
+              }
+              
+              // Parse name if we found it
+              if (fullName && typeof fullName === 'string') {
+                const { firstName, lastName } = parseName(fullName);
+                if (firstName) {
+                  personalInfo.firstName = firstName;
+                  personalInfo.lastName = lastName || '';
+                  fieldsUpdated += 2;
+                  nameExtracted = true;
+                  console.log(`✅ W-2 Name: ${personalInfo.firstName} ${personalInfo.lastName} (extracted from: ${fullName})`);
+                }
               }
             }
             
-            // Extract SSN from nested W-2 structure
-            if (employeeData?.value?.SocialSecurityNumber?.value?.valueString && !personalInfo.ssn) {
-              personalInfo.ssn = employeeData.value.SocialSecurityNumber.value.valueString;
-              fieldsUpdated++;
-              console.log(`✅ W-2 SSN: ${personalInfo.ssn}`);
+            // Extract SSN from nested W-2 structure - Try multiple paths
+            if (!personalInfo.ssn) {
+              // Path 1: Standard Azure nested structure
+              let ssn = employeeData?.value?.SocialSecurityNumber?.value?.valueString;
+              
+              // Path 2: Alternative nesting
+              if (!ssn) {
+                ssn = employeeData?.value?.SocialSecurityNumber?.valueString;
+              }
+              
+              // Path 3: Direct value
+              if (!ssn && employeeData?.value?.SocialSecurityNumber) {
+                ssn = employeeData.value.SocialSecurityNumber;
+              }
+              
+              // Path 4: Check if SSN is directly on the object
+              if (!ssn && employeeData?.SocialSecurityNumber?.value?.valueString) {
+                ssn = employeeData.SocialSecurityNumber.value.valueString;
+              }
+              
+              if (ssn && typeof ssn === 'string') {
+                personalInfo.ssn = ssn;
+                fieldsUpdated++;
+                ssnExtracted = true;
+                console.log(`✅ W-2 SSN: ${personalInfo.ssn}`);
+              }
             }
             
-            // Extract address from nested W-2 structure
-            if (employeeData?.value?.Address?.value && !personalInfo.address) {
-              extractAddressFromStructure(employeeData.value.Address.value, personalInfo, 'W-2');
-              fieldsUpdated += 4;
+            // Extract address from nested W-2 structure - Try multiple paths
+            if (!personalInfo.address) {
+              // Path 1: Standard Azure nested structure
+              let addressData = employeeData?.value?.Address?.value;
+              
+              // Path 2: Alternative nesting
+              if (!addressData) {
+                addressData = employeeData?.value?.Address;
+              }
+              
+              // Path 3: Direct on object
+              if (!addressData && employeeData?.Address?.value) {
+                addressData = employeeData.Address.value;
+              }
+              
+              if (addressData) {
+                extractAddressFromStructure(addressData, personalInfo, 'W-2');
+                fieldsUpdated += 4;
+                addressExtracted = true;
+              }
+            }
+            
+            // Log extraction summary
+            if (nameExtracted || ssnExtracted || addressExtracted) {
+              console.log(`✅ Successfully extracted from Employee object (0% confidence workaround): Name=${nameExtracted}, SSN=${ssnExtracted}, Address=${addressExtracted}`);
+            } else {
+              console.warn(`⚠️ Employee object found but no data could be extracted. Structure:`, JSON.stringify(employeeData).substring(0, 200));
             }
           }
 
           // 1099 Recipient Structure (Payer/Recipient can contain taxpayer info)
           else if (sourceType === '1099' && (fieldName.includes('recipient') || fieldName.includes('payer'))) {
             const recipientData = structuredData;
-            console.log(`📋 1099 Recipient/Payer data structure detected`);
+            console.log(`📋 1099 Recipient/Payer data structure detected (Confidence: ${recipientData?.confidence || 0})`);
             
-            // Extract name from 1099 recipient structure
-            if ((recipientData?.value?.Name?.value?.valueString || recipientData?.value?.name?.value?.valueString) && !personalInfo.firstName) {
-              const fullName = recipientData.value.Name?.value?.valueString || recipientData.value.name?.value?.valueString;
-              const nameParts = fullName.split(/\s+/);
-              if (nameParts.length >= 2) {
-                personalInfo.firstName = nameParts[0];
-                personalInfo.lastName = nameParts.slice(1).join(' ');
-                fieldsUpdated += 2;
-                console.log(`✅ 1099 Name: ${personalInfo.firstName} ${personalInfo.lastName}`);
+            // CRITICAL FIX: Accept recipient/payer data even with 0% confidence
+            console.log(`🔧 FIX APPLIED: Processing recipient/payer data regardless of confidence level`);
+            
+            // Try multiple extraction paths for robustness
+            let nameExtracted = false;
+            let ssnExtracted = false;
+            let addressExtracted = false;
+            
+            // Extract name from 1099 recipient structure - Try multiple paths
+            if (!personalInfo.firstName) {
+              // Path 1: Standard Azure nested structure with Name (capital N)
+              let fullName = recipientData?.value?.Name?.value?.valueString;
+              
+              // Path 2: lowercase name variant
+              if (!fullName) {
+                fullName = recipientData?.value?.name?.value?.valueString;
+              }
+              
+              // Path 3: Alternative nesting
+              if (!fullName) {
+                fullName = recipientData?.value?.Name?.valueString || recipientData?.value?.name?.valueString;
+              }
+              
+              // Path 4: Direct value
+              if (!fullName && recipientData?.value?.Name) {
+                fullName = recipientData.value.Name;
+              }
+              
+              // Path 5: Check if Name is directly on the object
+              if (!fullName && recipientData?.Name?.value?.valueString) {
+                fullName = recipientData.Name.value.valueString;
+              }
+              
+              // Parse name if we found it
+              if (fullName && typeof fullName === 'string') {
+                const { firstName, lastName } = parseName(fullName);
+                if (firstName) {
+                  personalInfo.firstName = firstName;
+                  personalInfo.lastName = lastName || '';
+                  fieldsUpdated += 2;
+                  nameExtracted = true;
+                  console.log(`✅ 1099 Name: ${personalInfo.firstName} ${personalInfo.lastName} (extracted from: ${fullName})`);
+                }
               }
             }
             
-            // Extract SSN/TIN from 1099 structure  
-            if ((recipientData?.value?.TaxpayerIdentificationNumber?.value?.valueString || recipientData?.value?.tin?.value?.valueString) && !personalInfo.ssn) {
-              const tin = recipientData.value.TaxpayerIdentificationNumber?.value?.valueString || recipientData.value.tin?.value?.valueString;
-              if (tin && tin.replace(/\D/g, '').length === 9) {
+            // Extract SSN/TIN from 1099 structure - Try multiple paths
+            if (!personalInfo.ssn) {
+              // Path 1: TaxpayerIdentificationNumber
+              let tin = recipientData?.value?.TaxpayerIdentificationNumber?.value?.valueString;
+              
+              // Path 2: tin (lowercase)
+              if (!tin) {
+                tin = recipientData?.value?.tin?.value?.valueString;
+              }
+              
+              // Path 3: Alternative nesting
+              if (!tin) {
+                tin = recipientData?.value?.TaxpayerIdentificationNumber?.valueString || recipientData?.value?.tin?.valueString;
+              }
+              
+              // Path 4: Direct value
+              if (!tin && recipientData?.value?.TaxpayerIdentificationNumber) {
+                tin = recipientData.value.TaxpayerIdentificationNumber;
+              }
+              
+              // Path 5: Check if TIN is directly on the object
+              if (!tin && recipientData?.TaxpayerIdentificationNumber?.value?.valueString) {
+                tin = recipientData.TaxpayerIdentificationNumber.value.valueString;
+              }
+              
+              if (tin && typeof tin === 'string') {
                 const ssnDigits = tin.replace(/\D/g, '');
-                personalInfo.ssn = `${ssnDigits.slice(0,3)}-${ssnDigits.slice(3,5)}-${ssnDigits.slice(5)}`;
-                fieldsUpdated++;
-                console.log(`✅ 1099 SSN/TIN: ${personalInfo.ssn}`);
+                if (ssnDigits.length === 9) {
+                  personalInfo.ssn = `${ssnDigits.slice(0,3)}-${ssnDigits.slice(3,5)}-${ssnDigits.slice(5)}`;
+                  fieldsUpdated++;
+                  ssnExtracted = true;
+                  console.log(`✅ 1099 SSN/TIN: ${personalInfo.ssn}`);
+                }
               }
             }
             
-            // Extract address from 1099 structure
-            if ((recipientData?.value?.Address?.value || recipientData?.value?.address?.value) && !personalInfo.address) {
-              const addressData = recipientData.value.Address?.value || recipientData.value.address?.value;
-              extractAddressFromStructure(addressData, personalInfo, '1099');
-              fieldsUpdated += 4;
+            // Extract address from 1099 structure - Try multiple paths
+            if (!personalInfo.address) {
+              // Path 1: Address with capital A
+              let addressData = recipientData?.value?.Address?.value;
+              
+              // Path 2: address with lowercase a
+              if (!addressData) {
+                addressData = recipientData?.value?.address?.value;
+              }
+              
+              // Path 3: Alternative nesting
+              if (!addressData) {
+                addressData = recipientData?.value?.Address || recipientData?.value?.address;
+              }
+              
+              // Path 4: Direct on object
+              if (!addressData && recipientData?.Address?.value) {
+                addressData = recipientData.Address.value;
+              }
+              
+              if (addressData) {
+                extractAddressFromStructure(addressData, personalInfo, '1099');
+                fieldsUpdated += 4;
+                addressExtracted = true;
+              }
+            }
+            
+            // Log extraction summary
+            if (nameExtracted || ssnExtracted || addressExtracted) {
+              console.log(`✅ Successfully extracted from Recipient/Payer object (0% confidence workaround): Name=${nameExtracted}, SSN=${ssnExtracted}, Address=${addressExtracted}`);
+            } else {
+              console.warn(`⚠️ Recipient/Payer object found but no data could be extracted. Structure:`, JSON.stringify(recipientData).substring(0, 200));
             }
           }
 
@@ -215,7 +376,10 @@ export default function PersonalInfoStep({ taxData, documents, updateTaxData }: 
 
         // ████ PRIORITY 2: Direct Field Mapping (Fallback) ████
         const extracted = extractValueFromAzureField(rawFieldValue);
-        if (extracted.value && extracted.confidence > 0.3) {
+        // CRITICAL FIX: Lowered confidence threshold from 0.3 to 0.0 to accept all data
+        // This ensures we extract personal information even when Azure reports low confidence
+        if (extracted.value && extracted.confidence >= 0.0) {
+          console.log(`🔧 FIX APPLIED: Processing field with confidence ${extracted.confidence} (threshold: 0.0)`);
           
           // Name extraction patterns
           if (!personalInfo.firstName && typeof extracted.value === 'string') {
@@ -225,12 +389,12 @@ export default function PersonalInfoStep({ taxData, documents, updateTaxData }: 
             ];
             
             if (namePatterns.some(pattern => fieldName.includes(pattern))) {
-              const nameParts = extracted.value.split(/\s+/);
-              if (nameParts.length >= 2) {
-                personalInfo.firstName = nameParts[0];
-                personalInfo.lastName = nameParts.slice(1).join(' ');
+              const { firstName, lastName } = parseName(extracted.value);
+              if (firstName) {
+                personalInfo.firstName = firstName;
+                personalInfo.lastName = lastName || '';
                 fieldsUpdated += 2;
-                console.log(`✅ Direct Name Extraction: ${personalInfo.firstName} ${personalInfo.lastName}`);
+                console.log(`✅ Direct Name Extraction: ${personalInfo.firstName} ${personalInfo.lastName} (from: ${extracted.value})`);
               }
             }
           }
@@ -350,6 +514,64 @@ export default function PersonalInfoStep({ taxData, documents, updateTaxData }: 
     const street = city ? beforeState.substring(0, beforeState.lastIndexOf(city)).replace(/,?\s*$/, '').trim() : beforeState;
     
     return { street, city, state, zip };
+  };
+
+  /**
+   * Parse full name into first name and last name components
+   * Handles common name formats:
+   * - "John Doe" -> { firstName: "John", lastName: "Doe" }
+   * - "Doe, John" -> { firstName: "John", lastName: "Doe" }
+   * - "John Middle Doe" -> { firstName: "John", lastName: "Middle Doe" }
+   * - "Doe, John Middle" -> { firstName: "John", lastName: "Doe Middle" }
+   */
+  const parseName = (fullName: string): { firstName: string; lastName: string } => {
+    if (!fullName || typeof fullName !== 'string') {
+      return { firstName: '', lastName: '' };
+    }
+    
+    const trimmedName = fullName.trim();
+    
+    // Handle "LastName, FirstName" format
+    if (trimmedName.includes(',')) {
+      const parts = trimmedName.split(',').map(p => p.trim());
+      if (parts.length >= 2) {
+        // parts[0] is last name, parts[1] is first name (and possibly middle name)
+        const lastName = parts[0];
+        const firstPart = parts[1];
+        
+        // If first part has multiple words, first word is first name, rest is middle name
+        const firstPartWords = firstPart.split(/\s+/);
+        if (firstPartWords.length > 1) {
+          return {
+            firstName: firstPartWords[0],
+            lastName: `${lastName} ${firstPartWords.slice(1).join(' ')}`
+          };
+        }
+        
+        return {
+          firstName: firstPart,
+          lastName: lastName
+        };
+      }
+    }
+    
+    // Handle "FirstName LastName" or "FirstName Middle LastName" format
+    const words = trimmedName.split(/\s+/);
+    if (words.length === 0) {
+      return { firstName: '', lastName: '' };
+    } else if (words.length === 1) {
+      // Only one word - treat as first name
+      return { firstName: words[0], lastName: '' };
+    } else if (words.length === 2) {
+      // Two words - first is first name, second is last name
+      return { firstName: words[0], lastName: words[1] };
+    } else {
+      // Three or more words - first is first name, rest is last name (including middle names)
+      return {
+        firstName: words[0],
+        lastName: words.slice(1).join(' ')
+      };
+    }
   };
 
   const handleInputChange = (field: string, value: string | number) => {
